@@ -39,11 +39,15 @@ adb install -r app-release.apk
 
 ## Connecting
 
+Both links are always printed on the TV screen, so you never have to guess an address.
+
 ### From any browser
 
 ```
-http://<tv-ip-address>:8080/ui/
+http://<tv-ip-address>:<port>/ui/
 ```
+
+`<port>` is **8080** unless something on the TV already held that port (see below).
 
 ### From the iPhone Files app
 
@@ -54,6 +58,16 @@ The exact address is printed on the TV screen and in the web interface:
 3. Tap **Connect**, choose **Registered User**, enter the username and password you set in the
    web interface (authentication is off by default, so Guest works until you turn it on).
 4. The share appears under **Shared** in the sidebar.
+
+### If 8080 is already taken
+
+Many Android TVs run their own remote control service on port 8080. If LANVault cannot bind the
+port you asked for, it falls forward to the next free one instead of failing, and then tells you
+exactly where it landed — on the TV screen, in the log, in the notification and in the web
+interface. Your preferred port is never overwritten, so if the other app later releases 8080 a
+restart picks it up again.
+
+The web interface shows a **Keep port N** button that pins the fallback port permanently.
 
 > **Protocol:** the iPhone Files app connects to file servers over SMB or WebDAV. LANVault speaks
 > **WebDAV** (RFC 4918) at the server root, which needs no native libraries and keeps the whole
@@ -70,7 +84,7 @@ Everything below is editable at `/ui/` → **Settings** while the server is runn
 
 | Setting | What it does |
 | --- | --- |
-| WebDAV & web port | Port for both the web interface and iPhone Files. Needs a restart to apply. |
+| WebDAV & web port | Port for both the web interface and iPhone Files. Needs a restart to apply. If it is busy the server falls forward to the next free port and says so. |
 | Server name | Name shown to iPhone Files as the share name. |
 | Require username and password | Applies a single set of HTTP Basic credentials to the web interface and WebDAV. |
 | Allow uploads / deletions / new folders | Client write permissions. |
@@ -126,7 +140,7 @@ keyPassword=your-key-password
 ./gradlew testDebugUnitTest
 ```
 
-37 tests covering the WebDAV method surface (OPTIONS, PROPFIND, PROPPATCH, GET/HEAD, PUT, DELETE,
+43 tests covering the WebDAV method surface (OPTIONS, PROPFIND, PROPPATCH, GET/HEAD, PUT, DELETE,
 MKCOL, MOVE, COPY, LOCK, UNLOCK, REPORT), byte ranges including suffix and out-of-range requests,
 a 2 MB payload round-trip, chunked uploads, keep-alive, path-traversal safety, the JSON API,
 Basic authentication and static asset routing.

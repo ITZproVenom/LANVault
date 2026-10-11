@@ -111,6 +111,11 @@ class ApiServerTest {
         val response = json("GET", "/api/state")
         assertEquals(200, response.code)
         assertTrue(response.body.contains("\"running\":true"))
+        // Both the requested and the actually bound port must be reported so the web
+        // interface can explain a fallback instead of showing a dead link.
+        assertTrue(response.body.contains("\"port\":$port"))
+        assertTrue(response.body.contains("\"requestedPort\":$port"))
+        assertTrue(response.body.contains("\"portInUseOnPreferred\":false"))
         assertTrue(response.body.contains("\"port\":$port"))
         assertTrue(response.body.contains("tv-storage"))
         assertTrue(response.body.contains("\"allFilesAccess\":true"))

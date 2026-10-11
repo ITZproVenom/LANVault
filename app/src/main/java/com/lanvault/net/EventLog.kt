@@ -34,6 +34,12 @@ class EventLog(private val capacity: Int = 400) {
     private fun append(level: Line.Level, message: String) {
         val line = Line(System.currentTimeMillis(), level, message)
         synchronized(lock) {
+            // Collapse a repeated failure (for example a retry loop hitting the same busy port)
+            // so the log stays readable on the TV screen.
+            val previous = lines.lastOrNull()
+            if (previous != null && previous.level == level && previous.message == message) {
+                lines.removeLast()
+            }
             lines.addLast(line)
             while (lines.size > capacity) lines.removeFirst()
             state.value = lines.toList()
