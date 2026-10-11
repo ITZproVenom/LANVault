@@ -59,6 +59,7 @@ class ServerService : LifecycleService() {
 
     private fun buildNotification(): Notification {
         val settings = AppRuntime.settingsStore.current()
+        val port = AppRuntime.server?.port ?: settings.serverPort
         val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
         val openIntent = Intent(this, MainActivity::class.java)
         val pendingOpen = PendingIntent.getActivity(
@@ -77,12 +78,12 @@ class ServerService : LifecycleService() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_server)
             .setContentTitle("LANVault is sharing storage")
-            .setContentText("http://$host:${settings.serverPort}/ui/ · WebDAV on port ${settings.serverPort}")
+            .setContentText("http://$host:${port}/ui/ · WebDAV on port ${port}")
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
-                        "Web interface: http://$host:${settings.serverPort}/ui/\n" +
-                            "iPhone Files > Connect to Server: http://$host:${settings.serverPort}/\n" +
+                        "Web interface: http://$host:${port}/ui/\n" +
+                            "iPhone Files > Connect to Server: http://$host:${port}/\n" +
                             "All settings are available in the web interface.",
                     ),
             )

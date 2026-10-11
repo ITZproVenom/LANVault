@@ -458,5 +458,26 @@ class LiteHttpServer(
     }
 }
 
-private const val BIND_ATTEMPTS = 6
-private const val BIND_RETRY_DELAY_MILLIS = 150L
+private const val BIND_ATTEMPTS = 3
+private const val BIND_RETRY_DELAY_MILLIS = 100L
+
+/**
+ * True when a bind failed because the port is taken rather than for a structural reason.
+ * Many Android TVs run their own remote control service on 8080, which collides with the
+ * default port, so callers need to tell this apart from a real configuration failure.
+ */
+fun isPortInUse(error: Throwable): Boolean {
+    var current: Throwable? = error
+    while (current != null) {
+        val message = current.message?.lowercase(Locale.US).orEmpty()
+        if (message.contains("eaddrinuse") ||
+            message.contains("address already in use") ||
+            message.contains("address in use") ||
+            message.contains("permission denied")
+        ) {
+            return true
+        }
+        current = current.cause
+    }
+    return false
+}

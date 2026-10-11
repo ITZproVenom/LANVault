@@ -97,16 +97,25 @@ class ApiHandler(
         val settings = settingsStore.current()
         val addresses = NetworkAddresses.ipv4()
         val volumes = storageRepository.discover()
+        val port = server.port
         return json(
             HttpResponse.status(200, "OK"),
             JSONObject()
                 .put("running", server.isRunning)
-                .put("port", settings.serverPort)
+                .put("port", port)
+                .put("requestedPort", settings.serverPort)
+                .put("portInUseOnPreferred", server.portInUseOnPreferred)
                 .put("deviceName", settings.deviceName)
                 .put("ipv4Addresses", JSONArray(addresses))
                 .put("hostnames", JSONArray(NetworkAddresses.hostnames()))
-                .put("webInterfaceUrl", if (addresses.isEmpty()) null else "http://${addresses.first()}:${settings.serverPort}/ui/")
-                .put("webdavUrl", if (addresses.isEmpty()) null else "http://${addresses.first()}:${settings.serverPort}/")
+                .put(
+                    "webInterfaceUrl",
+                    if (addresses.isEmpty()) null else "http://${addresses.first()}:$port/ui/",
+                )
+                .put(
+                    "webdavUrl",
+                    if (addresses.isEmpty()) null else "http://${addresses.first()}:$port/",
+                )
                 .put("requiresAuth", settings.requireAuth)
                 .put("allFilesAccess", storageRepository.hasAllFilesAccess())
                 .put("versionName", server.versionName)

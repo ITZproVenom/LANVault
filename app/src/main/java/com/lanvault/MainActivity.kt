@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var webdavUrl: TextView
     private lateinit var volumesValue: TextView
     private lateinit var permissionValue: TextView
+    private lateinit var portFallbackValue: TextView
     private lateinit var logView: TextView
     private lateinit var grantAccessButton: Button
     private lateinit var addDriveButton: Button
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
         webdavUrl = findViewById(R.id.webdavUrl)
         volumesValue = findViewById(R.id.volumesValue)
         permissionValue = findViewById(R.id.permissionValue)
+        portFallbackValue = findViewById(R.id.portFallbackValue)
         logView = findViewById(R.id.logView)
         grantAccessButton = findViewById(R.id.grantAccessButton)
         addDriveButton = findViewById(R.id.addDriveButton)
@@ -88,18 +90,43 @@ class MainActivity : ComponentActivity() {
     private fun renderState() {
         val settings = AppRuntime.settingsStore.current()
         val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
-        val running = AppRuntime.running.value || AppRuntime.server?.isRunning == true
+        val server = AppRuntime.server
+        val running = AppRuntime.running.value || server?.isRunning == true
+        val port = server?.port ?: settings.serverPort
+        val preferredPort = settings.serverPort
+        val fellBack = port != preferredPort
 
         statusBadge.text = if (running) "ONLINE" else "OFFLINE"
         statusBadge.setTextColor(resources.getColor(if (running) R.color.accent else R.color.danger, theme))
         statusLine.text = if (running) {
-            "Sharing files on this network, port ${settings.serverPort}. " +
-                "${visibleDrives.size} drive(s) shared, ${driveSummary}"
+            buildString {
+                append("Sharing files on this network, port ")
+                append(port)
+                append(". ")
+                append(visibleDrives.size)
+                append(" drive(s) shared, ")
+                append(driveSummary)
+                if (fellBack) {
+                    append(". Port ")
+                    append(preferredPort)
+                    append(" was already in use, so the TV picked ")
+                    append(port)
+                    append(".")
+                }
+            }
         } else {
-            "Server not running. Open the web interface at http://$host:${settings.serverPort}/ui/ to manage it."
+            "Server not running. Open the web interface at http://$host:$port/ui/ to manage it."
         }
-        webInterfaceUrl.text = "http://$host:${settings.serverPort}/ui/"
-        webdavUrl.text = "http://$host:${settings.serverPort}/"
+        webInterfaceUrl.text = "http://$host:$port/ui/"
+        webdavUrl.text = "http://$host:$port/"
+
+        portFallbackValue.text = if (fellBack) {
+            "Port $preferredPort is taken by another app on this TV, so LANVault is using $port. " +
+                "Change it in the web interface if you want a different one."
+        } else {
+            ""
+        }
+        portFallbackValue.visibility = if (fellBack) View.VISIBLE else View.GONE
 
         val hasAccess = StoragePermissions.isGranted(this)
         grantAccessButton.visibility = if (hasAccess) View.GONE else View.VISIBLE

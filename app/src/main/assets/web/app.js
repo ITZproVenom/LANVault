@@ -7,6 +7,7 @@
   var state = {
     volumes: [],
     settings: {},
+    portInfo: null,
     info: {},
     path: '',
     entries: [],
@@ -79,19 +80,39 @@
       state.info = payload;
       state.settings = payload.settings || {};
       state.volumes = payload.volumes || [];
+      state.portInfo = {
+        port: payload.port,
+        requestedPort: payload.requestedPort,
+        fellBack: !!payload.portInUseOnPreferred
+      };
       els.statusDot.classList.toggle('offline', !payload.running);
       els.sidebarFooter.textContent = payload.running
         ? 'Port ' + payload.port + ' · ' + payload.volumeCount + ' shared'
         : 'Server offline';
       renderVolumes();
-      updateNotice(payload);
+      updateNotices(payload);
       if (state.route === 'browse') renderPathBar();
     }).catch(function (error) {
       els.sidebarFooter.textContent = error.message;
     });
   }
 
-  function updateNotice(info) {
+  function updateNotices(info) {
+    // A port conflict outranks the permission notice: without a binding port the whole
+    // interface, including the permission prompt, is unreachable.
+    if (info.portInUseOnPreferred) {
+      els.noticeText.textContent =
+        'Port ' + info.requestedPort + ' is already in use by another app on this TV, so the ' +
+        'server is listening on port ' + info.port + ' instead.';
+      els.noticeAction.textContent = 'Keep port ' + info.port;
+      els.noticeAction.onclick = function () {
+        postSettings({ serverPort: String(info.port) }).then(function () {
+          toast('Now using port ' + info.port);
+        }).catch(toast);
+      };
+      els.notice.classList.add('show');
+      return;
+    }
     if (info.allFilesAccess) {
       els.notice.classList.remove('show');
       return;
@@ -105,6 +126,22 @@
       }).catch(toast);
     };
     els.notice.classList.add('show');
+  }
+
+  function postSettings(values) {
+    var parts = [];
+    Object.keys(values || {}).forEach(function (key) {
+      parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(values[key]));
+    });
+    return api('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: parts.join('&')
+    }).then(function (payload) {
+      state.settings = payload.settings || {};
+      renderSettings();
+      return payload;
+    });
   }
 
   function route() {
@@ -563,7 +600,12 @@
       '<div class="link-box"><span class="mono">Web interface: ' + escapeHtml(state.info.webInterfaceUrl || '') + '</span></div>' +
       '<div class="link-box"><span class="mono">iPhone Files &gt; Connect to Server: ' + escapeHtml(state.info.webdavUrl || '') + '</span></div>' +
       '<p class="hint">Detected addresses on this network: ' + escapeHtml(addresses || 'none') + '</p>' +
-
+      (state.portInfo && state.portInfo.fellBack
+        ? '<p class="hint" style="color:var(--warning)">Requested port ' +
+          escapeHtml(String(state.portInfo.requestedPort)) + ' is held by another app on this TV. ' +
+          'The server is live on port ' + escapeHtml(String(state.portInfo.port)) +
+          '; the field above will pick it up if you save the form.</p>'
+        : '') +
       '<h3>Server</h3>' +
       fieldNumber('serverPort', 'WebDAV &amp; web port', 'Port used by both the web interface and iPhone Files.') +
       fieldText('deviceName', 'Server name', 'Shown to iPhone Files as the share name.') +

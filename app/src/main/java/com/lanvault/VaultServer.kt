@@ -9,6 +9,7 @@ import com.lanvault.net.EventLog
 import com.lanvault.net.HttpRequest
 import com.lanvault.net.HttpResponse
 import com.lanvault.net.LiteHttpServer
+import com.lanvault.net.isPortInUse
 import com.lanvault.settings.Settings
 import com.lanvault.settings.SettingsStore
 import com.lanvault.storage.SafePath
@@ -39,37 +40,87 @@ class VaultServer(
         packageInfo.versionName ?: "1.0.0"
     }.getOrDefault("1.0.0")
 
+    /**
+     * Port the server is actually listening on, which is not necessarily the requested one:
+     * Android TVs often run their own remote control service on 8080, so a busy port falls
+     * forward to the next free one instead of leaving the TV unreachable.
+     */
+    val effectivePort: Int get() = server?.port ?: 0
+
     val isRunning: Boolean get() = server?.isRunning == true
 
-    val port: Int get() = settingsStore.current().serverPort
+    val portInUseOnPreferred: Boolean get() = effectivePort > 0 && effectivePort != settingsStore.current().serverPort
+
+    val port: Int get() = if (effectivePort > 0) effectivePort else settingsStore.current().serverPort
 
     fun start() {
-        val settings = settingsStore.current()
         if (isRunning) return
-        try {
-            val socket = LiteHttpServer(settings.serverPort, ::route)
-            socket.start()
-            server = socket
-            val addresses = NetworkAddresses.ipv4()
-            val host = addresses.firstOrNull() ?: "this-tv"
-            EventLog.shared.info(
-                "Server listening on http://$host:${settings.serverPort}/ " +
-                    "(web UI /ui/, WebDAV /)",
-            )
-            if (!settings.shareWebdav) {
-                EventLog.shared.warn("WebDAV sharing is switched off - iPhone Files cannot connect.")
+        val preferred = settingsStore.current().serverPort
+        var candidate = preferred
+        var lastError: Throwable? = null
+
+        repeat(MAX_PORT_ATTEMPTS) { attempt ->
+            val attemptNumber = attempt + 1
+            val listener = LiteHttpServer(candidate, ::route)
+            try {
+                listener.start()
+                server = listener
+                lastError = null
+                reportStarted(listener.port, preferred)
+                return
+            } catch (error: Throwable) {
+                runCatching { listener.close() }
+                lastError = error
+                val next = nextCandidatePort(candidate, attemptNumber)
+                if (!isPortInUse(error) || attemptNumber == MAX_PORT_ATTEMPTS || next == null) {
+                    return@repeat
+                }
+                candidate = next
             }
-            if (!storageRepository.hasAllFilesAccess()) {
-                EventLog.shared.warn("Full storage access is not granted - some drives may be hidden.")
-            }
-        } catch (error: Throwable) {
-            server = null
-            EventLog.shared.error(
-                "Could not start on port ${settings.serverPort}: ${error.message}. " +
-                    "Change the port in the web interface or free the port.",
-            )
-            throw error
         }
+
+        server = null
+        val failure = lastError ?: IllegalStateException("Unable to bind any port")
+        if (isPortInUse(failure)) {
+            EventLog.shared.error(
+                "Ports $preferred-${candidate} are all in use. Free one of them, or change the " +
+                    "port in the web interface.",
+            )
+        } else {
+            EventLog.shared.error(
+                "Could not start on port $preferred: ${failure.message}. " +
+                    "Change the port in the web interface.",
+            )
+        }
+        throw failure
+    }
+
+    private fun reportStarted(boundPort: Int, preferred: Int) {
+        val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
+        if (boundPort != preferred) {
+            EventLog.shared.warn(
+                "Port $preferred was already in use (another app on the TV is holding it), so the " +
+                    "server is using port $boundPort instead. Open http://$host:$boundPort/ui/ to " +
+                    "change it.",
+            )
+        } else {
+            EventLog.shared.info("Server listening on http://$host:$boundPort/ (web UI /ui/, WebDAV /)")
+        }
+        val settings = settingsStore.current()
+        if (!settings.shareWebdav) {
+            EventLog.shared.warn("WebDAV sharing is switched off - iPhone Files cannot connect.")
+        }
+        if (!storageRepository.hasAllFilesAccess()) {
+            EventLog.shared.warn("Full storage access is not granted - some drives may be hidden.")
+        }
+    }
+
+    /** Spreads the fallback attempts out so a run of adjacent busy ports is skipped quickly. */
+    private fun nextCandidatePort(from: Int, attempt: Int): Int? {
+        val steps = intArrayOf(1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000)
+        val step = steps.getOrElse(attempt - 1) { steps.last() }
+        val candidate = from + step
+        return if (candidate > MAX_PORT) null else candidate
     }
 
     fun stop() {
@@ -219,6 +270,9 @@ class VaultServer(
         remoteAddress = request.remoteAddress,
     )
 }
+
+private const val MAX_PORT_ATTEMPTS = 12
+private const val MAX_PORT = 65535
 
 /** Names used by the volume kind picker in the web UI. */
 fun VolumeKind.label(): String = when (this) {
