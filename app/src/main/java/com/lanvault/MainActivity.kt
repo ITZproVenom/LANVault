@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var volumesValue: TextView
     private lateinit var permissionValue: TextView
     private lateinit var portFallbackValue: TextView
+    private lateinit var authStateValue: TextView
+    private lateinit var webdavHint: TextView
     private lateinit var logView: TextView
     private lateinit var grantAccessButton: Button
     private lateinit var addDriveButton: Button
@@ -80,6 +82,8 @@ class MainActivity : ComponentActivity() {
         volumesValue = findViewById(R.id.volumesValue)
         permissionValue = findViewById(R.id.permissionValue)
         portFallbackValue = findViewById(R.id.portFallbackValue)
+        authStateValue = findViewById(R.id.authStateValue)
+        webdavHint = findViewById(R.id.webdavHint)
         logView = findViewById(R.id.logView)
         grantAccessButton = findViewById(R.id.grantAccessButton)
         addDriveButton = findViewById(R.id.addDriveButton)
@@ -119,6 +123,25 @@ class MainActivity : ComponentActivity() {
         }
         webInterfaceUrl.text = "http://$host:$port/ui/"
         webdavUrl.text = "http://$host:$port/"
+
+        // The iPhone flow has two branches, and picking the wrong one strands the user on a
+        // username screen. Say which one to take instead of always recommending Registered User,
+        // which is only correct once a password has been set in the web interface.
+        if (settings.requireAuth) {
+            webdavHint.text = buildString {
+                append("Files app → Browse → … → Connect to Server. ")
+                append("Choose Registered User, then enter \"")
+                append(settings.username)
+                append("\" and the password you set in the web interface.")
+            }
+            authStateValue.text = "A username and password are required to connect."
+            authStateValue.setTextColor(resources.getColor(R.color.warning, theme))
+        } else {
+            webdavHint.text =
+                "Files app → Browse → … → Connect to Server. Choose Guest — no username or password needed."
+            authStateValue.text = "Open access: any device on this network can connect without a password."
+            authStateValue.setTextColor(resources.getColor(R.color.text_secondary, theme))
+        }
 
         portFallbackValue.text = if (fellBack) {
             "Port $preferredPort is taken by another app on this TV, so LANVault is using $port. " +

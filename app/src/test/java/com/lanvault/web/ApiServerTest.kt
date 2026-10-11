@@ -101,10 +101,14 @@ class ApiServerTest {
         return RawResponse(code, text, responseHeaders)
     }
 
-    private fun json(method: String, path: String, body: String? = null): RawResponse =
-        request(method, path, body).also {
-            assertEquals("application/json; charset=utf-8", it.headers["content-type"])
-        }
+    private fun json(
+        method: String,
+        path: String,
+        body: String? = null,
+        credentials: Pair<String, String>? = null,
+    ): RawResponse = request(method, path, body, credentials = credentials).also {
+        assertEquals("application/json; charset=utf-8", it.headers["content-type"])
+    }
 
     @Test
     fun `state reports the server, links and settings`() {
@@ -250,6 +254,44 @@ class ApiServerTest {
         val styles = request("GET", "/ui/style.css")
         assertEquals(200, styles.code)
         assertTrue(styles.body.contains("--accent"))
+    }
+
+    /**
+     * The iPhone Files app has two branches in Connect to Server: Guest sends no credentials,
+     * Registered User sends whatever the user typed. Both have to work when access is open,
+     * otherwise the user is stranded on the username screen with no way forward.
+     */
+    @Test
+    fun `iphone guest login needs no credentials`() {
+        val response = rawSocket("/", mapOf("Depth" to "0"))
+        assertEquals(207, response.code)
+        assertTrue(response.body.contains("<D:multistatus"))
+    }
+
+    @Test
+    fun `iphone registered user login is accepted while access is open`() {
+        val token = Base64.getEncoder()
+            .encodeToString("anything:whatever".toByteArray(StandardCharsets.UTF_8))
+        val response = rawSocket("/", mapOf("Depth" to "1", "Authorization" to "Basic $token"))
+        assertEquals(207, response.code)
+        assertTrue(response.body.contains("<D:multistatus"))
+    }
+
+    @Test
+    fun `the api reports whether a password is required so the ui can say which branch to pick`() {
+        val open = json("GET", "/api/state")
+        assertTrue(open.body.contains("\"requiresAuth\":false"))
+
+        settingsStore.update { it.copy(requireAuth = true, password = "hunter2") }
+        val challenged = request("GET", "/api/state")
+        assertEquals(401, challenged.code)
+        assertTrue(challenged.headers["www-authenticate"].orEmpty().contains("Basic"))
+
+        val locked = json("GET", "/api/state", credentials = "lanvault" to "hunter2")
+        assertEquals(200, locked.code)
+        assertTrue(locked.body.contains("\"requiresAuth\":true"))
+        // The username is what the iPhone Registered User screen has to be told.
+        assertTrue(locked.body.contains("\"username\":\"lanvault\""))
     }
 
     @Test

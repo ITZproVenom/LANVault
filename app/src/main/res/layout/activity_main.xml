@@ -104,11 +104,19 @@
             android:textSize="20sp" />
 
         <TextView
+            android:id="@+id/authStateValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp" />
+
+        <TextView
             android:id="@+id/webdavHint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Files app → Browse → … → Connect to Server. Log in as a registered user with the credentials set in the web interface."
+            android:text=""
             android:textColor="@color/text_secondary"
             android:textSize="13sp" />
 

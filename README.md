@@ -54,10 +54,15 @@ http://<tv-ip-address>:<port>/ui/
 The exact address is printed on the TV screen and in the web interface:
 
 1. Files app → **Browse** → **…** (top right) → **Connect to Server**
-2. Enter `http://<tv-ip-address>:8080/` — no path after the port.
-3. Tap **Connect**, choose **Registered User**, enter the username and password you set in the
-   web interface (authentication is off by default, so Guest works until you turn it on).
+2. Enter `http://<tv-ip-address>:<port>/` — no path after the port.
+3. Tap **Connect**, then pick the branch that matches your settings:
+   - **Access is open (the default)** — choose **Guest**. No username, no password.
+   - **"Require a username and password" is turned on** — choose **Registered User**, then enter
+     the username (default `lanvault`) and the password you set.
 4. The share appears under **Shared** in the sidebar.
+
+The TV screen always names the branch you should take, and the username to use when a password is
+required, so you never have to guess which one applies.
 
 ### If 8080 is already taken
 
@@ -140,7 +145,7 @@ keyPassword=your-key-password
 ./gradlew testDebugUnitTest
 ```
 
-43 tests covering the WebDAV method surface (OPTIONS, PROPFIND, PROPPATCH, GET/HEAD, PUT, DELETE,
+46 tests covering the WebDAV method surface (OPTIONS, PROPFIND, PROPPATCH, GET/HEAD, PUT, DELETE,
 MKCOL, MOVE, COPY, LOCK, UNLOCK, REPORT), byte ranges including suffix and out-of-range requests,
 a 2 MB payload round-trip, chunked uploads, keep-alive, path-traversal safety, the JSON API,
 Basic authentication and static asset routing.
