@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>LANVault — storage server</title>
+  <link rel="stylesheet" href="/ui/style.css" />
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="dot" id="statusDot"></span><span>LAN<span style="color:var(--accent)">Vault</span></span></div>
+
+      <nav class="nav">
+        <a href="#/browse" data-nav="browse">Files</a>
+        <a href="#/uploads" data-nav="uploads">Transfer</a>
+        <a href="#/settings" data-nav="settings">Settings</a>
+        <a href="#/logs" data-nav="logs">Logs</a>
+      </nav>
+
+      <div>
+        <div class="volumes-title">Drives</div>
+        <div class="volume-list" id="volumeList"></div>
+      </div>
+
+      <div class="sidebar-footer" id="sidebarFooter">—</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="path-bar" id="pathBar"></div>
+        <div class="actions">
+          <button class="ghost small" id="viewToggle" title="Switch between grid and list">List view</button>
+          <button class="ghost small" id="newFolderButton">New folder</button>
+          <button class="ghost small" id="uploadButton">Upload</button>
+        </div>
+      </div>
+
+      <div class="notice" id="notice">
+        <div id="noticeText"></div>
+        <button class="primary small" id="noticeAction">Fix it</button>
+      </div>
+
+      <div class="dropzone" id="dropzone">Drop files here to copy them into this folder</div>
+
+      <section id="view"></section>
+
+      <div id="uploadProgress" class="progress" style="display:none"><div></div></div>
+    </main>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="sheet" id="overlaySheet"></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <input type="file" id="filePicker" multiple hidden />
+  <script src="/ui/app.js"></script>
+</body>
+</html>

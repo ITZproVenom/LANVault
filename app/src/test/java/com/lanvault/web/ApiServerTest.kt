@@ -229,6 +229,23 @@ class ApiServerTest {
     }
 
     @Test
+    fun `the web interface is served from the assets folder`() {
+        val index = request("GET", "/ui/")
+        assertEquals(200, index.code)
+        assertEquals("text/html; charset=utf-8", index.headers["content-type"])
+        assertTrue(index.body.contains("LANVault"))
+
+        val script = request("GET", "/ui/app.js")
+        assertEquals(200, script.code)
+        assertEquals("text/javascript; charset=utf-8", script.headers["content-type"])
+        assertTrue(script.body.contains("/api/list"))
+
+        val styles = request("GET", "/ui/style.css")
+        assertEquals(200, styles.code)
+        assertTrue(styles.body.contains("--accent"))
+    }
+
+    @Test
     fun `unknown api endpoints return json errors`() {
         val response = json("GET", "/api/nope")
         assertEquals(404, response.code)
