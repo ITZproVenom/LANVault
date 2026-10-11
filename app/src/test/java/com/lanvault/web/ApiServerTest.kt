@@ -48,7 +48,9 @@ class ApiServerTest {
         context = ApplicationProvider.getApplicationContext()
         settingsStore = SettingsStore(context)
         settingsStore.resetToDefaults()
-        port = 18000 + (Math.random() * 2000).toInt()
+        // Ask the OS for a free port: a random one can collide with a port a previous test
+        // method has not released yet, which makes assertions run against the wrong server.
+        port = java.net.ServerSocket(0).use { it.localPort }
         settingsStore.update { it.copy(serverPort = port, requireAuth = false, password = "secret") }
 
         root = File.createTempFile("lanvault-api", "").let { file ->
