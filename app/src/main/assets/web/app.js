@@ -8,6 +8,7 @@
     volumes: [],
     settings: {},
     portInfo: null,
+    requiresAuth: false,
     info: {},
     path: '',
     entries: [],
@@ -79,6 +80,7 @@
     api('/api/state').then(function (payload) {
       state.info = payload;
       state.settings = payload.settings || {};
+      state.requiresAuth = !!(payload.settings || {}).requireAuth;
       state.volumes = payload.volumes || [];
       state.portInfo = {
         port: payload.port,
@@ -600,6 +602,10 @@
       '<div class="link-box"><span class="mono">Web interface: ' + escapeHtml(state.info.webInterfaceUrl || '') + '</span></div>' +
       '<div class="link-box"><span class="mono">iPhone Files &gt; Connect to Server: ' + escapeHtml(state.info.webdavUrl || '') + '</span></div>' +
       '<p class="hint">Detected addresses on this network: ' + escapeHtml(addresses || 'none') + '</p>' +
+      '<div class="link-box" style="flex-direction:column;align-items:flex-start">' +
+      '<strong>Connecting from an iPhone</strong>' +
+      '<span style="color:var(--muted);font-size:13px">' + iphoneInstructions() + '</span>' +
+      '</div>' +
       (state.portInfo && state.portInfo.fellBack
         ? '<p class="hint" style="color:var(--warning)">Requested port ' +
           escapeHtml(String(state.portInfo.requestedPort)) + ' is held by another app on this TV. ' +
@@ -666,6 +672,24 @@
     if (!node) return;
     if (node.type === 'checkbox') node.checked = !!value;
     else node.value = value === undefined || value === null ? '' : value;
+  }
+
+  /*
+   * The Files app has two branches and picking the wrong one strands the user on a
+   * username screen. Say which to take instead of always recommending Registered User,
+   * which is only correct once a password has been set here.
+   */
+  function iphoneInstructions() {
+    var address = state.info.webdavUrl || ('http://<tv-ip>:' + state.info.port + '/');
+    if (state.requiresAuth) {
+      return 'Open ' + escapeHtml(address) + ' in Files → Browse → … → Connect to Server, ' +
+        'choose <strong>Registered User</strong>, then sign in with username ' +
+        '<strong>' + escapeHtml(state.settings.username || 'lanvault') + '</strong> and the ' +
+        'password set below.';
+    }
+    return 'Open ' + escapeHtml(address) + ' in Files → Browse → … → Connect to Server and ' +
+      'choose <strong>Guest</strong>. No username or password is needed unless you turn on ' +
+      'the password option below.';
   }
 
   function fieldText(id, label, desc) {
