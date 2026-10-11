@@ -1,0 +1,133 @@
+package com.lanvault
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.net.Uri
+import android.os.Build
+import android.os.IBinder
+import android.os.PowerManager
+import androidx.core.app.NotificationCompat
+import androidx.lifecycle.LifecycleService
+import com.lanvault.net.EventLog
+import com.lanvault.web.NetworkAddresses
+
+/** Keeps the LAN storage server alive while the TV is on. */
+class ServerService : LifecycleService() {
+
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        AppRuntime.initialize(this)
+        createNotificationChannel()
+        startForegroundCompat(buildNotification())
+        EventLog.shared.info("LANVault service started.")
+
+        if (AppRuntime.settingsStore.current().keepCpuAwake) {
+            wakeLock = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LANVault:server").apply { acquire() }
+        }
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
+        val action = intent?.action
+        when (action) {
+            ACTION_STOP -> {
+                AppRuntime.settingsStore.update { it.copy(autoStartOnBoot = false) }
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            else -> AppRuntime.startServer(this)
+        }
+        startForegroundCompat(buildNotification())
+        return START_STICKY
+    }
+
+    override fun onDestroy() {
+        AppRuntime.stopServer()
+        wakeLock?.let { lock -> if (lock.isHeld) runCatching { lock.release() } }
+        wakeLock = null
+        EventLog.shared.info("LANVault service stopped.")
+        super.onDestroy()
+    }
+
+    private fun buildNotification(): Notification {
+        val settings = AppRuntime.settingsStore.current()
+        val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
+        val openIntent = Intent(this, MainActivity::class.java)
+        val pendingOpen = PendingIntent.getActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val stopIntent = Intent(this, ServerService::class.java).setAction(ACTION_STOP)
+        val pendingStop = PendingIntent.getService(
+            this,
+            1,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_server)
+            .setContentTitle("LANVault is sharing storage")
+            .setContentText("http://$host:${settings.serverPort}/ui/ · WebDAV on port ${settings.serverPort}")
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .bigText(
+                        "Web interface: http://$host:${settings.serverPort}/ui/\n" +
+                            "iPhone Files > Connect to Server: http://$host:${settings.serverPort}/\n" +
+                            "All settings are available in the web interface.",
+                    ),
+            )
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(pendingOpen)
+            .addAction(0, "Stop sharing", pendingStop)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun startForegroundCompat(notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = getSystemService(NotificationManager::class.java) ?: return
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            getString(R.string.notification_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.notification_channel_description)
+            setShowBadge(false)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    companion object {
+        const val CHANNEL_ID = "lanvault_server"
+        const val NOTIFICATION_ID = 1001
+        const val ACTION_STOP = "com.lanvault.action.STOP"
+
+        fun start(context: Context) {
+            val intent = Intent(context, ServerService::class.java)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            }
+        }
+    }
+}
