@@ -48,7 +48,9 @@ class ApiServerTest {
         context = ApplicationProvider.getApplicationContext()
         settingsStore = SettingsStore(context)
         settingsStore.resetToDefaults()
-        port = 18000 + (Math.random() * 2000).toInt()
+        // Ask the OS for a free port: a random one can collide with a port a previous test
+        // method has not released yet, which makes assertions run against the wrong server.
+        port = java.net.ServerSocket(0).use { it.localPort }
         settingsStore.update { it.copy(serverPort = port, requireAuth = false, password = "secret") }
 
         root = File.createTempFile("lanvault-api", "").let { file ->
@@ -226,6 +228,23 @@ class ApiServerTest {
         assertEquals(200, response.code)
         assertTrue(response.body.contains("\"lines\""))
         assertTrue(response.body.contains("Server listening"))
+    }
+
+    @Test
+    fun `the web interface is served from the assets folder`() {
+        val index = request("GET", "/ui/")
+        assertEquals(200, index.code)
+        assertEquals("text/html; charset=utf-8", index.headers["content-type"])
+        assertTrue(index.body.contains("LANVault"))
+
+        val script = request("GET", "/ui/app.js")
+        assertEquals(200, script.code)
+        assertEquals("text/javascript; charset=utf-8", script.headers["content-type"])
+        assertTrue(script.body.contains("/api/list"))
+
+        val styles = request("GET", "/ui/style.css")
+        assertEquals(200, styles.code)
+        assertTrue(styles.body.contains("--accent"))
     }
 
     @Test
