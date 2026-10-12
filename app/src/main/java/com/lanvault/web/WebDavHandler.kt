@@ -341,8 +341,18 @@ class WebDavHandler(
         }
 
         val output = volume.openWriteSource(relativePath, append = false) ?: return serverError()
-        output.use { destination -> request.body.copyTo(destination, COPY_BUFFER_SIZE) }
-        EventLog.shared.http("PUT ${request.rawTarget} ${if (existed) "204" else "201"}")
+        val declared = request.header("Content-Length")?.toLongOrNull()
+        val written = output.use { destination -> request.body.copyTo(destination, COPY_BUFFER_SIZE) }
+        if (declared != null && written != declared) {
+            runCatching { volume.delete(relativePath) }
+            EventLog.shared.warn("PUT ${request.rawTarget} aborted after $written of $declared bytes")
+            return HttpResponse.status(400, "Bad Request").apply {
+                header("Content-Type", "text/plain; charset=utf-8")
+                bodyBytes = ("Transfer stopped after $written of $declared bytes, nothing was saved.")
+                    .toByteArray(Charsets.UTF_8)
+            }
+        }
+        EventLog.shared.http("PUT ${request.rawTarget} ${if (existed) "204" else "201"} ($written bytes)")
         return if (existed) HttpResponse.status(204, "No Content") else HttpResponse.status(201, "Created")
     }
 

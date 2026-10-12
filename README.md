@@ -39,7 +39,9 @@ adb install -r app-release.apk
 
 ## Connecting
 
-Both links are always printed on the TV screen, so you never have to guess an address.
+Both links are printed on the TV screen, and when the TV has more than one network address
+**every** address is listed. Use the one on the same network as your device — the web interface
+marks the address that actually reached it, so you can see which one works.
 
 ### From any browser
 
@@ -63,6 +65,13 @@ The exact address is printed on the TV screen and in the web interface:
 
 The TV screen always names the branch you should take, and the username to use when a password is
 required, so you never have to guess which one applies.
+
+### If a video will not preview
+
+The web player can only play formats your browser can decode. iPhone and iPad Safari cannot play
+Matroska (`.mkv`), `.avi`, `.wmv`, `.flv` or `.flac`, among others — the player says so instead of
+failing silently, and offers a download. MP4/H.264 plays natively everywhere. Streaming itself is
+not affected: any format the browser supports is streamed with range requests.
 
 ### If 8080 is already taken
 
@@ -145,7 +154,7 @@ keyPassword=your-key-password
 ./gradlew testDebugUnitTest
 ```
 
-46 tests covering the WebDAV method surface (OPTIONS, PROPFIND, PROPPATCH, GET/HEAD, PUT, DELETE,
+52 tests covering the WebDAV method surface (OPTIONS, PROPFIND, PROPPATCH, GET/HEAD, PUT, DELETE,
 MKCOL, MOVE, COPY, LOCK, UNLOCK, REPORT), byte ranges including suffix and out-of-range requests,
 a 2 MB payload round-trip, chunked uploads, keep-alive, path-traversal safety, the JSON API,
 Basic authentication and static asset routing.

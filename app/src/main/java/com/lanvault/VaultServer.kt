@@ -96,7 +96,8 @@ class VaultServer(
     }
 
     private fun reportStarted(boundPort: Int, preferred: Int) {
-        val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
+        val addresses = NetworkAddresses.ipv4()
+        val host = addresses.firstOrNull() ?: "this-tv"
         if (boundPort != preferred) {
             EventLog.shared.warn(
                 "Port $preferred was already in use (another app on the TV is holding it), so the " +
@@ -105,6 +106,12 @@ class VaultServer(
             )
         } else {
             EventLog.shared.info("Server listening on http://$host:$boundPort/ (web UI /ui/, WebDAV /)")
+        }
+        if (addresses.size > 1) {
+            EventLog.shared.info(
+                "This TV has ${addresses.size} network addresses: ${addresses.joinToString(", ")}. " +
+                    "Use the one that shares a network with the device you are connecting from.",
+            )
         }
         val settings = settingsStore.current()
         if (!settings.shareWebdav) {

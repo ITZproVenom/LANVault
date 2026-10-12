@@ -279,8 +279,22 @@ class ApiHandler(
         }
         val relativePath = if (relativeDirectory.isEmpty()) name else "$relativeDirectory/$name"
         val output = volume.openWriteSource(relativePath, append = false) ?: return gone()
-        output.use { destination -> request.body.copyTo(destination, 128 * 1024) }
-        EventLog.shared.http("UPLOAD $name -> $relativePath")
+        val written = output.use { destination -> request.body.copyTo(destination, 128 * 1024) }
+        val expected = request.header("Content-Length")?.toLongOrNull()
+        if (expected != null && written != expected) {
+            // A dropped connection on a phone otherwise leaves a half written file that looks
+            // like a successful upload.
+            runCatching { volume.delete(relativePath) }
+            EventLog.shared.warn("UPLOAD $name aborted after $written of $expected bytes")
+            return json(
+                HttpResponse.status(400, "Bad Request"),
+                JSONObject().put(
+                    "error",
+                    "Transfer stopped after $written of $expected bytes. The file was not saved.",
+                ),
+            )
+        }
+        EventLog.shared.http("UPLOAD $name -> $relativePath ($written bytes)")
         return json(
             HttpResponse.status(201, "Created"),
             JSONObject().put("ok", true).put("path", "$directory/$name".replace("//", "/")),

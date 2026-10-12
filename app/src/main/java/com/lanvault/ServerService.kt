@@ -60,7 +60,8 @@ class ServerService : LifecycleService() {
     private fun buildNotification(): Notification {
         val settings = AppRuntime.settingsStore.current()
         val port = AppRuntime.server?.port ?: settings.serverPort
-        val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
+        val addresses = NetworkAddresses.ipv4()
+        val host = addresses.firstOrNull() ?: "this-tv"
         val openIntent = Intent(this, MainActivity::class.java)
         val pendingOpen = PendingIntent.getActivity(
             this,
@@ -82,9 +83,14 @@ class ServerService : LifecycleService() {
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
-                        "Web interface: http://$host:${port}/ui/\n" +
-                            "iPhone Files > Connect to Server: http://$host:${port}/\n" +
-                            "All settings are available in the web interface.",
+                        buildString {
+                            append("Web interface: ")
+                            append(addresses.joinToString("  ") { "http://$it:${port}/ui/" }.ifEmpty { host })
+                            append("\niPhone Files > Connect to Server: ")
+                            append(addresses.joinToString("  ") { "http://$it:${port}/" }.ifEmpty { host })
+                            append("\nUse the address on the same network as your device. " +
+                                "All settings are in the web interface.")
+                        },
                     ),
             )
             .setOngoing(true)

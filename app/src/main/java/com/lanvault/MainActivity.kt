@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var portFallbackValue: TextView
     private lateinit var authStateValue: TextView
     private lateinit var webdavHint: TextView
+    private lateinit var networkNoteValue: TextView
     private lateinit var logView: TextView
     private lateinit var grantAccessButton: Button
     private lateinit var addDriveButton: Button
@@ -84,6 +85,7 @@ class MainActivity : ComponentActivity() {
         portFallbackValue = findViewById(R.id.portFallbackValue)
         authStateValue = findViewById(R.id.authStateValue)
         webdavHint = findViewById(R.id.webdavHint)
+        networkNoteValue = findViewById(R.id.networkNoteValue)
         logView = findViewById(R.id.logView)
         grantAccessButton = findViewById(R.id.grantAccessButton)
         addDriveButton = findViewById(R.id.addDriveButton)
@@ -93,7 +95,10 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetTextI18n")
     private fun renderState() {
         val settings = AppRuntime.settingsStore.current()
-        val host = NetworkAddresses.ipv4().firstOrNull() ?: "this-tv"
+        // A TV often has several interfaces - Ethernet, Wi-Fi and sometimes a VPN or a
+        // developer bridge - and only one of them shares a network with the phone. Listing
+        // a single address and hoping it is the right one is what makes Connect to Server fail.
+        val addresses = NetworkAddresses.ipv4()
         val server = AppRuntime.server
         val running = AppRuntime.running.value || server?.isRunning == true
         val port = server?.port ?: settings.serverPort
@@ -119,10 +124,23 @@ class MainActivity : ComponentActivity() {
                 }
             }
         } else {
-            "Server not running. Open the web interface at http://$host:$port/ui/ to manage it."
+            "Server not running. Open the web interface to manage it."
         }
-        webInterfaceUrl.text = "http://$host:$port/ui/"
-        webdavUrl.text = "http://$host:$port/"
+
+        if (addresses.isEmpty()) {
+            webInterfaceUrl.text = "No network connection"
+            webdavUrl.text = "Connect the TV to your network"
+        } else {
+            webInterfaceUrl.text = addresses.joinToString("\n") { "http://$it:$port/ui/" }
+            webdavUrl.text = addresses.joinToString("\n") { "http://$it:$port/" }
+        }
+        networkNoteValue.text = if (addresses.size > 1) {
+            "This TV has ${addresses.size} network addresses. Use the one on the same network " +
+                "as your device - the web interface marks the one that reached it."
+        } else {
+            ""
+        }
+        networkNoteValue.visibility = if (addresses.size > 1) View.VISIBLE else View.GONE
 
         // The iPhone flow has two branches, and picking the wrong one strands the user on a
         // username screen. Say which one to take instead of always recommending Registered User,
