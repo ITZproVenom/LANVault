@@ -79,6 +79,7 @@
   function refresh() {
     api('/api/state').then(function (payload) {
       state.info = payload;
+      state.reachableAddress = (window.location && window.location.hostname) || null;
       state.settings = payload.settings || {};
       state.requiresAuth = !!(payload.settings || {}).requireAuth;
       state.volumes = payload.volumes || [];
@@ -382,6 +383,7 @@
     } else {
       showFileCard(entry);
     }
+    return entry;
   }
 
   function showImage(entry) {
@@ -427,17 +429,42 @@
     if (next) next.addEventListener('click', function () { step(1); });
   }
 
+  /*
+   * Media playable by the browser depends on the container. iPhone and iPad Safari in
+   * particular cannot decode Matroska, WMV, AVI or FLAC, which is the usual reason a preview
+   * does nothing. Surfacing the reason beats leaving a silent failure, and offer the download
+   * so the user still gets the file.
+   */
+  var UNSUPPORTED_EXTENSIONS = ['mkv', 'avi', 'wmv', 'flv', 'mov', 'divx', 'asf', 'm2ts', 'ts',
+    'flac', 'wma', 'aiff', 'mid', 'midi', 'amr', 'ogg', 'oga', 'opus'];
+
+  function extensionOf(name) {
+    return String(name || '').split('.').pop().toLowerCase();
+  }
+
+  function playbackWarning(entry) {
+    if (!UNSUPPORTED_EXTENSIONS || UNSUPPORTED_EXTENSIONS.indexOf(extensionOf(entry.name)) < 0) {
+      return null;
+    }
+    var kind = entry.kind === 'audio' ? 'This audio file' : 'This video';
+    return kind + ' is in a format this browser cannot decode, so it cannot be played here. ' +
+      'Use Download to save it, or open it in an app that supports .' + extensionOf(entry.name) + '.';
+  }
+
   function showPlayer(entry) {
     var src = '/api/file?path=' + encodeURIComponent(entry.path);
     var tag = entry.kind === 'audio' ? 'audio' : 'video';
+    var warning = playbackWarning(entry);
     els.overlaySheet.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
       '<strong style="max-width:70%;overflow:hidden;text-overflow:ellipsis">' + escapeHtml(entry.name) + '</strong>' +
       '<button id="closePlayer" class="small ghost">Close</button></div>' +
+      (warning ? '<p style="color:var(--warning);font-size:13px;margin:0 0 10px">' + warning + '</p>' : '') +
       '<' + tag + ' id="player" controls autoplay playsinline preload="metadata"' +
       (entry.kind === 'video' ? ' style="width:100%;background:#000"' : ' style="width:100%"') + '>' +
       '<source src="' + src + '" /></' + tag + '>' +
-      '<p style="color:var(--muted);font-size:13px;margin-top:10px">' +
+      '<p id="playerError" style="color:var(--danger);font-size:13px;margin:10px 0 0;display:none"></p>' +
+      '<p id="playerNote" style="color:var(--muted);font-size:13px;margin-top:10px' + (warning ? ';display:none' : '') + '">' +
       'Streamed straight from the source — nothing is downloaded first.</p>' +
       '<button id="downloadPlayer" class="small" style="margin-top:4px">Download instead</button>';
     showOverlay();
@@ -445,6 +472,25 @@
     document.getElementById('downloadPlayer').addEventListener('click', function () {
       window.location = '/api/download?path=' + encodeURIComponent(entry.path);
     });
+
+    var player = document.getElementById('player');
+    var errorLine = document.getElementById('playerError');
+    var noteLine = document.getElementById('playerNote');
+    function fail(reason) {
+      player.style.display = 'none';
+      noteLine.style.display = 'none';
+      errorLine.style.display = '';
+      errorLine.textContent = reason;
+    }
+    player.addEventListener('error', function () {
+      fail(warning || 'This browser could not play the file. Use Download to save it.');
+    });
+    player.addEventListener('stalled', function () {
+      fail('Loading stalled. Check that the TV is still reachable, then try again.');
+    });
+    if (warning) {
+      fail(warning);
+    }
   }
 
   function showFileCard(entry) {
@@ -599,9 +645,9 @@
       '<p class="hint">Everything on this page applies immediately to the LAN server. The TV screen only shows status.</p>' +
 
       '<h3>Access links</h3>' +
-      '<div class="link-box"><span class="mono">Web interface: ' + escapeHtml(state.info.webInterfaceUrl || '') + '</span></div>' +
-      '<div class="link-box"><span class="mono">iPhone Files &gt; Connect to Server: ' + escapeHtml(state.info.webdavUrl || '') + '</span></div>' +
-      '<p class="hint">Detected addresses on this network: ' + escapeHtml(addresses || 'none') + '</p>' +
+      addressList('Web interface', 'ui/') +
+      addressList('iPhone Files &gt; Connect to Server', '') +
+      addressNote(addresses) +
       '<div class="link-box" style="flex-direction:column;align-items:flex-start">' +
       '<strong>Connecting from an iPhone</strong>' +
       '<span style="color:var(--muted);font-size:13px">' + iphoneInstructions() + '</span>' +
@@ -675,12 +721,49 @@
   }
 
   /*
+   * A TV often has several interfaces and only one shares a network with the device in front
+   * of you. Showing one address and hoping it is the right one is what breaks Connect to
+   * Server, so list them all and flag the one this browser actually reached.
+   */
+  function addressList(label, suffix) {
+    var list = (state.info.ipv4Addresses || []);
+    if (!list.length) {
+      return '<div class="link-box"><span class="muted">' + label + ': no address found</span></div>';
+    }
+    return list.map(function (address) {
+      var working = state.reachableAddress && address === state.reachableAddress;
+      var url = 'http://' + address + ':' + state.info.port + (suffix ? '/' + suffix : '/');
+      return '<div class="link-box">' +
+        '<span class="mono">' + label + ': ' + escapeHtml(url) + '</span>' +
+        (working ? '<strong style="color:var(--accent);font-size:13px">working</strong>' : '') +
+        '</div>';
+    }).join('');
+  }
+
+  function addressNote(addresses) {
+    var count = (state.info.ipv4Addresses || []).length;
+    if (count <= 1) return '';
+    return '<p class="hint">This TV has ' + count + ' addresses. The one marked ' +
+      '<strong style="color:var(--accent)">working</strong> is the one that reached this browser, ' +
+      'so it is the one your device can use. Detected: ' + escapeHtml(addresses || '') + '</p>';
+  }
+
+  /*
    * The Files app has two branches and picking the wrong one strands the user on a
    * username screen. Say which to take instead of always recommending Registered User,
    * which is only correct once a password has been set here.
    */
   function iphoneInstructions() {
     var address = state.info.webdavUrl || ('http://<tv-ip>:' + state.info.port + '/');
+    var all = (state.info.ipv4Addresses || []).map(function (a) {
+      return 'http://' + a + ':' + state.info.port + '/';
+    });
+    if (all.length) {
+      address = all.join(' or ');
+      if (state.reachableAddress && all.indexOf('http://' + state.reachableAddress + ':' + state.info.port + '/') >= 0) {
+        address = 'http://' + state.reachableAddress + ':' + state.info.port + '/';
+      }
+    }
     if (state.requiresAuth) {
       return 'Open ' + escapeHtml(address) + ' in Files → Browse → … → Connect to Server, ' +
         'choose <strong>Registered User</strong>, then sign in with username ' +

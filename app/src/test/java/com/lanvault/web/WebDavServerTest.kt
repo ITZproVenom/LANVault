@@ -244,6 +244,20 @@ class WebDavServerTest {
     }
 
     @Test
+    fun `browser style open ended ranges work for video`() {
+        raw("PUT", "/$volumeId/clip.mp4", "0123456789")
+        val openEnded = raw("GET", "/$volumeId/clip.mp4", headers = mapOf("Range" to "bytes=0-"))
+        assertEquals(206, openEnded.code)
+        assertEquals("bytes 0-9/10", openEnded.headers["content-range"])
+        assertEquals("0123456789", openEnded.body)
+
+        val firstTwo = raw("GET", "/$volumeId/clip.mp4", headers = mapOf("Range" to "bytes=0-1"))
+        assertEquals(206, firstTwo.code)
+        assertEquals("bytes 0-1/10", firstTwo.headers["content-range"])
+        assertEquals("01", firstTwo.body)
+    }
+
+    @Test
     fun `suffix ranges and out of range requests are handled`() {
         raw("PUT", "/$volumeId/data.bin", "abcdefghij")
         val suffix = get("/$volumeId/data.bin", range = "bytes=-3")

@@ -77,6 +77,9 @@ class LocalStorageVolume(
         val options = buildList {
             add(StandardOpenOption.CREATE)
             add(StandardOpenOption.WRITE)
+            // Without TRUNCATE_EXISTING an overwrite leaves the tail of the previous file,
+            // so a shorter upload over a longer one silently produces a corrupt result.
+            if (!append) add(StandardOpenOption.TRUNCATE_EXISTING)
             if (append) add(StandardOpenOption.APPEND)
         }
         val channel = runCatching { FileChannel.open(file.toPath(), *options.toTypedArray()) }.getOrNull() ?: return null
