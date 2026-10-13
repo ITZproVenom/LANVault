@@ -83,6 +83,7 @@ class ApiHandler(
             "clear-cache" -> clearCache(request)
             "monitoring/status" -> monitoringStatus()
             "monitoring/embedded" -> embeddedAdGuardHomeStatus()
+            "monitoring/embedded/credentials" -> embeddedAdGuardHomeCredentials(request)
             "monitoring/embedded/start" -> startEmbeddedAdGuardHome(request)
             "monitoring/embedded/stop" -> stopEmbeddedAdGuardHome(request)
             "monitoring/embedded/autostart" -> setEmbeddedAdGuardHomeAutostart(request)
@@ -563,6 +564,15 @@ class ApiHandler(
 
     private fun embeddedAdGuardHomeStatus(): HttpResponse =
         json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.status())
+
+    private fun embeddedAdGuardHomeCredentials(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") {
+            return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        }
+        readBody(request)
+        // VaultServer only routes /api/monitoring after LANVault's unique Basic credentials validate.
+        return json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.initialAdminCredentials())
+    }
 
     private fun startEmbeddedAdGuardHome(request: HttpRequest): HttpResponse {
         if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
