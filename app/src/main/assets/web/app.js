@@ -852,7 +852,7 @@
         '<div class="monitor-hero"><div><p class="eyebrow">LANVAULT / NETWORK</p><h2>Network monitor</h2>' +
         '<p class="hint">Read-only monitoring for this TV, AdGuard Home, and your AdGuard DNS cloud account.</p></div>' +
         '<button class="primary" id="monitorRefresh">Refresh now</button></div>' +
-        '<div class="monitor-alert" id="monitorAuthWarning">Monitoring integrations contain private network and account data. Enable username/password protection in LANVault Settings first. AdGuard sign-in is sent to this TV over local HTTP, so use this only on a trusted LAN.</div>' +
+        '<div class="monitor-alert" id="monitorAuthWarning">Monitoring integrations contain private network and account data. Set a unique, non-default username and password in LANVault Settings first. AdGuard sign-in is sent to this TV over local HTTP, so use this only on a trusted LAN.</div>' +
         '<section class="monitor-section"><h3>TV gateway health</h3><div class="monitor-cards" id="monitorLocalCards"><div class="monitor-card"><span>Loading</span><strong>…</strong></div></div>' +
         '<details class="monitor-details"><summary>Interfaces and observed router neighbours</summary><pre class="monitor-json" id="monitorLocalDetails">Loading…</pre></details>' +
         '<div class="monitor-proxy-form"><label for="monitorProxyPort">Every Proxy listening port <span>0 disables the check</span></label><div class="monitor-form-row"><input type="number" id="monitorProxyPort" min="0" max="65535" placeholder="e.g. 8080" /><button id="monitorProxySave">Save port</button></div><p class="hint" id="monitorProxyMessage">Checks whether a TCP listener responds on 127.0.0.1. It does not change Every Proxy.</p></div></section>' +
@@ -933,7 +933,7 @@
       var warning = document.getElementById('monitorAuthWarning');
       if (warning) {
         warning.style.display = '';
-        warning.textContent = error.message + ' Open Settings, enable username/password protection, and reload this page before connecting monitoring services.';
+        warning.textContent = error.message + ' Open Settings, set a unique non-default username and password, and reload this page before connecting monitoring services.';
       }
       setMonitorText('monitorHomeMessage', error.message);
       setMonitorText('monitorCloudMessage', error.message);

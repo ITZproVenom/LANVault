@@ -576,6 +576,7 @@ class ApiHandler(
 
     private fun forgetMonitoringHome(request: HttpRequest): HttpResponse {
         if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request) // Consume the empty JSON request body before keep-alive reuses the connection.
         return json(HttpResponse.status(200, "OK"), networkMonitoring.forgetHome())
     }
 
@@ -598,12 +599,14 @@ class ApiHandler(
 
     private fun refreshMonitoringCloud(request: HttpRequest): HttpResponse {
         if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request) // Consume the empty JSON request body before keep-alive reuses the connection.
         return try { json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot(forceRefresh = true)) }
         catch (_: Throwable) { json(HttpResponse.status(502, "Bad Gateway"), JSONObject().put("error", "Could not refresh AdGuard DNS data.")) }
     }
 
     private fun signOutMonitoringCloud(request: HttpRequest): HttpResponse {
         if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request) // Consume the empty JSON request body before keep-alive reuses the connection.
         return json(HttpResponse.status(200, "OK"), networkMonitoring.signOutCloud())
     }
 

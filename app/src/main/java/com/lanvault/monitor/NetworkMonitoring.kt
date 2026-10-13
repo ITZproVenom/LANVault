@@ -198,7 +198,9 @@ class NetworkMonitoring(context: Context) {
     fun signOutCloud(): JSONObject {
         val saved = readCloudTokens()
         if (saved != null) runCatching {
-            requestJson(REVOKE_URL, "POST", form = mapOf("token" to saved.optString("refreshToken")))
+            val refreshToken = saved.optString("refreshToken")
+            val encodedToken = URLEncoder.encode(refreshToken, "UTF-8")
+            requestJson(REVOKE_URL + "?refresh_token=" + encodedToken, "POST")
         }
         preferences.edit().remove(KEY_CLOUD_TOKENS).apply()
         cloudCache = null
