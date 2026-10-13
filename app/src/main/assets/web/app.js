@@ -848,7 +848,7 @@
         ['Bundled version', data.version || '—'],
         ['Android ABI', data.abi || 'Unknown'],
         ['Admin interface', data.adminReachable ? 'Reachable' : 'Not reachable'],
-        ['DNS port ' + String(data.dnsPort || 5353), data.dnsTcpReachable ? 'TCP listener detected' : 'TCP listener not detected']
+        ['DNS port ' + String(data.dnsPort || 53535), data.dnsTcpReachable ? 'TCP listener detected' : 'TCP listener not detected']
       ].map(function (card) {
         return '<div class="monitor-card"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(String(card[1])) + '</strong></div>';
       }).join('');
@@ -929,7 +929,7 @@
         '<pre class="monitor-json" id="aghRuntimeCredentials" style="display:none">—</pre>' +
         '<div id="aghRuntimeLinks" class="monitor-link-list"></div>' +
         '<details class="monitor-details"><summary>AdGuard Home runtime log</summary><pre class="monitor-json" id="aghRuntimeLog">—</pre></details>' +
-        '<p class="hint">This build uses DNS port 535355 so AdGuard Home can run without root. You can manage filtering and use the dashboard, but a typical router expects DNS on port 53. Router-wide ad blocking requires a supported privileged port-53 setup or a router-side forwarding rule; do not point router DNS here until DNS is confirmed reachable.</p></section>' +
+        '<p class="hint">This build uses DNS port 53535 so AdGuard Home can run without root. You can manage filtering and use the dashboard, but a typical router expects DNS on port 53. Router-wide ad blocking requires a supported privileged port-53 setup or a router-side forwarding rule; do not point router DNS here until DNS is confirmed reachable.</p></section>' +
         '<section class="monitor-section"><div class="monitor-heading"><div><h3>Connect to another AdGuard Home (optional)</h3><p class="hint">Use this only if you also have a separate AdGuard Home server elsewhere.</p></div><span class="monitor-badge" id="monitorHomeBadge">Not configured</span></div>' +
         '<div class="monitor-form-grid"><div class="field"><div><label for="monitorHomeUrl">AdGuard Home base URL</label><div class="desc">Example: http://192.168.1.20:3000. Use the origin only, not /control.</div></div><input type="text" id="monitorHomeUrl" placeholder="http://192.168.1.20:3000" autocomplete="url" /></div>' +
         '<div class="field"><div><label for="monitorHomeUser">Admin username</label></div><input type="text" id="monitorHomeUser" autocomplete="username" /></div>' +
