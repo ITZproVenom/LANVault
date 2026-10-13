@@ -95,9 +95,8 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetTextI18n")
     private fun renderState() {
         val settings = AppRuntime.settingsStore.current()
-        // A TV often has several interfaces - Ethernet, Wi-Fi and sometimes a VPN or a
-        // developer bridge - and only one of them shares a network with the phone. Listing
-        // a single address and hoping it is the right one is what makes Connect to Server fail.
+        // A TV often has multiple interfaces, so list them all and let the browser UI identify
+        // the working address. The HTTP WebDAV URL is for compatible clients, not native iOS Files.
         val addresses = NetworkAddresses.ipv4()
         val server = AppRuntime.server
         val running = AppRuntime.running.value || server?.isRunning == true
@@ -142,21 +141,13 @@ class MainActivity : ComponentActivity() {
         }
         networkNoteValue.visibility = if (addresses.size > 1) View.VISIBLE else View.GONE
 
-        // The iPhone flow has two branches, and picking the wrong one strands the user on a
-        // username screen. Say which one to take instead of always recommending Registered User,
-        // which is only correct once a password has been set in the web interface.
+        webdavHint.text =
+            "WebDAV is for compatible clients, not the native iPhone Files Connect to Server dialog. " +
+                "Open the Web interface link above in Safari to browse and stream. LANVault does not run SMB."
         if (settings.requireAuth) {
-            webdavHint.text = buildString {
-                append("Files app → Browse → … → Connect to Server. ")
-                append("Choose Registered User, then enter \"")
-                append(settings.username)
-                append("\" and the password you set in the web interface.")
-            }
-            authStateValue.text = "A username and password are required to connect."
+            authStateValue.text = "A username and password are required for protected server/API access."
             authStateValue.setTextColor(resources.getColor(R.color.warning, theme))
         } else {
-            webdavHint.text =
-                "Files app → Browse → … → Connect to Server. Choose Guest — no username or password needed."
             authStateValue.text = "Open access: any device on this network can connect without a password."
             authStateValue.setTextColor(resources.getColor(R.color.text_secondary, theme))
         }
