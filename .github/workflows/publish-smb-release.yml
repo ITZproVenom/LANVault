@@ -13,43 +13,30 @@ permissions:
   contents: write
 
 concurrency:
-  group: lanvault-smb-preview-release
+  group: lanvault-smb-preview-release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Wait for the matching APK build to pass
+      - name: Select latest successful APK build
         id: build
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          run_id=""
-          for attempt in $(seq 1 45); do
-            runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch "$GITHUB_REF_NAME" --json databaseId,status,conclusion,headSha --limit 100)"
-            match="$(printf '%s' "$runs" | jq -c --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)] | first // empty')"
-            if [ -n "$match" ]; then
-              status="$(printf '%s' "$match" | jq -r '.status')"
-              conclusion="$(printf '%s' "$match" | jq -r '.conclusion // empty')"
-              run_id="$(printf '%s' "$match" | jq -r '.databaseId')"
-              if [ "$status" = "completed" ]; then
-                if [ "$conclusion" != "success" ]; then
-                  echo "The APK build for $GITHUB_SHA did not pass: $conclusion"
-                  exit 1
-                fi
-                echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-              echo "APK build $run_id is $status; waiting (attempt $attempt/45)."
-            else
-              echo "Waiting for the APK build to appear (attempt $attempt/45)."
-            fi
-            sleep 20
-          done
-          echo "Timed out waiting for a successful APK build for $GITHUB_SHA."
-          exit 1
+          runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch "$GITHUB_REF_NAME" --json databaseId,status,conclusion,headSha --limit 100)"
+          match="$(printf '%s' "$runs" | jq -c '[.[] | select(.status == "completed" and .conclusion == "success")] | sort_by(.databaseId) | last // empty')"
+          if [ -z "$match" ]; then
+            echo "No successful APK build is available to publish."
+            exit 1
+          fi
+          run_id="$(printf '%s' "$match" | jq -r '.databaseId')"
+          source_sha="$(printf '%s' "$match" | jq -r '.headSha')"
+          echo "Publishing the verified APK from build $run_id ($source_sha)."
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
 
       - name: Download the verified APK artifact
         env:
@@ -83,7 +70,7 @@ jobs:
             lanvault-1.0.3-smb-preview.apk \
             SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --target "${{ steps.build.outputs.source_sha }}" \
             --title "LANVault 1.0.3 SMB preview" \
             --prerelease \
             --notes "Preview build from commit $GITHUB_SHA. Adds a bundled SMB2/3 server for native iPhone Files while retaining WebDAV. Built and uploaded only after the matching Android build, tests, APK assembly, and lint completed successfully. Not yet tested on the target Android TV device."
