@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           run_id=""
           for attempt in $(seq 1 45); do
-            runs="$(gh run list --workflow build.yml --branch "$GITHUB_REF_NAME" --json databaseId,status,conclusion,headSha --limit 100)"
+            runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch "$GITHUB_REF_NAME" --json databaseId,status,conclusion,headSha --limit 100)"
             match="$(printf '%s' "$runs" | jq -c --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)] | first // empty')"
             if [ -n "$match" ]; then
               status="$(printf '%s' "$match" | jq -r '.status')"
