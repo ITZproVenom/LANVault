@@ -14,6 +14,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.lanvault.net.EventLog
+import com.lanvault.monitor.AdGuardHomeRuntime
 import com.lanvault.web.NetworkAddresses
 
 /** Keeps the LAN storage server alive while the TV is on. */
@@ -43,13 +44,19 @@ class ServerService : LifecycleService() {
                 stopSelf()
                 return START_NOT_STICKY
             }
-            else -> AppRuntime.startServer(this)
+            else -> {
+                AppRuntime.startServer(this)
+                Thread({
+                    runCatching { AdGuardHomeRuntime.get(this).startIfEnabled() }
+                }, "lanvault-adguardhome-autostart").start()
+            }
         }
         startForegroundCompat(buildNotification())
         return START_STICKY
     }
 
     override fun onDestroy() {
+        runCatching { AdGuardHomeRuntime.get(this).stop() }
         AppRuntime.stopServer()
         wakeLock?.let { lock -> if (lock.isHeld) runCatching { lock.release() } }
         wakeLock = null

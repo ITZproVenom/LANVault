@@ -633,3 +633,9 @@ code,
 .monitor-details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 .monitor-json { margin: 8px 0 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); max-height: 330px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 700px) { .monitor-two-col { grid-template-columns: 1fr; } .monitor-section { padding: 13px; } .monitor-hero { align-items: stretch; } }
+
+
+.monitor-inline-check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.monitor-inline-check input { accent-color: var(--accent); width: 18px; height: 18px; }
+.monitor-link-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.monitor-link { display: block; padding: 12px; border: 1px solid var(--line); border-radius: 10px; overflow-wrap: anywhere; background: var(--bg); }

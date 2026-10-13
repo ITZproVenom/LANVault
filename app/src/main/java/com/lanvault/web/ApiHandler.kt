@@ -17,6 +17,7 @@ import com.lanvault.storage.VolumeKind
 import com.lanvault.storage.slug
 import com.lanvault.monitor.NetworkMonitoring
 import com.lanvault.monitor.MonitoringException
+import com.lanvault.monitor.AdGuardHomeRuntime
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.Inet4Address
@@ -58,6 +59,7 @@ class ApiHandler(
 
     private val fileSystem = VaultFileSystem(storageRepository, settingsStore)
     private val networkMonitoring = NetworkMonitoring(server.monitoringContext)
+    private val embeddedAdGuardHome = AdGuardHomeRuntime.get(server.monitoringContext)
 
     fun handle(request: HttpRequest): HttpResponse {
         val action = request.path.removePrefix("/api").trim('/')
@@ -80,6 +82,10 @@ class ApiHandler(
             "restart" -> restart(request)
             "clear-cache" -> clearCache(request)
             "monitoring/status" -> monitoringStatus()
+            "monitoring/embedded" -> embeddedAdGuardHomeStatus()
+            "monitoring/embedded/start" -> startEmbeddedAdGuardHome(request)
+            "monitoring/embedded/stop" -> stopEmbeddedAdGuardHome(request)
+            "monitoring/embedded/autostart" -> setEmbeddedAdGuardHomeAutostart(request)
             "monitoring/home" -> monitoringHome()
             "monitoring/home/config" -> configureMonitoringHome(request)
             "monitoring/home/forget" -> forgetMonitoringHome(request)
@@ -553,6 +559,33 @@ class ApiHandler(
         return json(HttpResponse.status(200, "OK"), JSONObject().put("lines", JSONArray(lines)))
     }
 
+
+
+    private fun embeddedAdGuardHomeStatus(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.status())
+
+    private fun startEmbeddedAdGuardHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request)
+        return try {
+            json(HttpResponse.status(202, "Accepted"), embeddedAdGuardHome.start())
+        } catch (error: Throwable) {
+            val message = error.message?.take(700) ?: "AdGuard Home could not start."
+            json(HttpResponse.status(500, "Internal Server Error"), JSONObject().put("error", message))
+        }
+    }
+
+    private fun stopEmbeddedAdGuardHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request)
+        return json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.stop())
+    }
+
+    private fun setEmbeddedAdGuardHomeAutostart(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.setAutoStart(body.optBoolean("enabled", false)))
+    }
 
     private fun monitoringStatus(): HttpResponse =
         json(HttpResponse.status(200, "OK"), networkMonitoring.status())

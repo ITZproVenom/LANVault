@@ -845,6 +845,68 @@
   }
 
 
+
+  function refreshEmbeddedAdGuardHome() {
+    return monitorApi('/api/monitoring/embedded').then(function (data) {
+      document.getElementById('aghRuntimeBadge').textContent =
+        data.running ? (data.adminReachable ? 'Running' : 'Starting') : (data.binaryBundled ? 'Stopped' : 'Binary unavailable');
+      document.getElementById('aghRuntimeMessage').textContent = data.message || 'No status available.';
+      document.getElementById('aghRuntimeAutostart').checked = !!data.autoStart;
+      document.getElementById('aghRuntimeStart').disabled = !!data.running || !data.binaryBundled || !data.supportedAbi;
+      document.getElementById('aghRuntimeStop').disabled = !data.running;
+      document.getElementById('aghRuntimeCards').innerHTML = [
+        ['Bundled version', data.version || '—'],
+        ['Android ABI', data.abi || 'Unknown'],
+        ['Admin interface', data.adminReachable ? 'Reachable' : 'Not reachable'],
+        ['DNS TCP port 53', data.dnsTcpReachable ? 'Reachable' : 'Not detected']
+      ].map(function (card) {
+        return '<div class="monitor-card"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(String(card[1])) + '</strong></div>';
+      }).join('');
+      document.getElementById('aghRuntimeLinks').innerHTML = (data.adminUrls || []).map(function (url) {
+        return '<a class="monitor-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open AdGuard Home setup / dashboard · ' + escapeHtml(url) + '</a>';
+      }).join('') || '<span class="hint">Start AdGuard Home to make the setup interface available at port ' + escapeHtml(String(data.adminPort || 3000)) + '.</span>';
+      document.getElementById('aghRuntimeLog').textContent = data.logTail || 'No runtime log yet.';
+      return data;
+    }).catch(function (error) {
+      setMonitorText('aghRuntimeMessage', error.message);
+    });
+  }
+
+  function startEmbeddedAdGuardHome() {
+    var button = document.getElementById('aghRuntimeStart');
+    button.disabled = true;
+    setMonitorText('aghRuntimeMessage', 'Starting the bundled Android AdGuard Home service…');
+    monitorApi('/api/monitoring/embedded/start', 'POST', {}).then(function () {
+      toast('AdGuard Home start requested');
+      return refreshEmbeddedAdGuardHome();
+    }).catch(function (error) {
+      setMonitorText('aghRuntimeMessage', error.message);
+      toast(error.message);
+      return refreshEmbeddedAdGuardHome();
+    }).then(function () { button.disabled = false; });
+  }
+
+  function stopEmbeddedAdGuardHome() {
+    var button = document.getElementById('aghRuntimeStop');
+    button.disabled = true;
+    monitorApi('/api/monitoring/embedded/stop', 'POST', {}).then(function () {
+      toast('AdGuard Home stopped');
+      return refreshEmbeddedAdGuardHome();
+    }).catch(function (error) {
+      setMonitorText('aghRuntimeMessage', error.message);
+    }).then(function () { button.disabled = false; });
+  }
+
+  function setEmbeddedAdGuardHomeAutostart() {
+    var enabled = document.getElementById('aghRuntimeAutostart').checked;
+    monitorApi('/api/monitoring/embedded/autostart', 'POST', { enabled: enabled }).then(function () {
+      toast(enabled ? 'AdGuard Home will start with LANVault' : 'AdGuard Home auto-start disabled');
+      refreshEmbeddedAdGuardHome();
+    }).catch(function (error) {
+      setMonitorText('aghRuntimeMessage', error.message);
+    });
+  }
+
   /* --------------------------------------------------------- network monitoring */
   function renderMonitoring() {
     els.view.innerHTML =
@@ -856,7 +918,13 @@
         '<section class="monitor-section"><h3>TV gateway health</h3><div class="monitor-cards" id="monitorLocalCards"><div class="monitor-card"><span>Loading</span><strong>…</strong></div></div>' +
         '<details class="monitor-details"><summary>Interfaces and observed router neighbours</summary><pre class="monitor-json" id="monitorLocalDetails">Loading…</pre></details>' +
         '<div class="monitor-proxy-form"><label for="monitorProxyPort">Every Proxy listening port <span>0 disables the check</span></label><div class="monitor-form-row"><input type="number" id="monitorProxyPort" min="0" max="65535" placeholder="e.g. 8080" /><button id="monitorProxySave">Save port</button></div><p class="hint" id="monitorProxyMessage">Checks whether a TCP listener responds on 127.0.0.1. It does not change Every Proxy.</p></div></section>' +
-        '<section class="monitor-section"><div class="monitor-heading"><div><h3>AdGuard Home</h3><p class="hint">Connect to a running AdGuard Home instance for local DNS, clients, query logs and blocking stats.</p></div><span class="monitor-badge" id="monitorHomeBadge">Not configured</span></div>' +
+        '<section class="monitor-section"><div class="monitor-heading"><div><h3>AdGuard Home on this TV</h3><p class="hint">The actual AdGuard Home server is bundled into this APK for Android ARM/ARM64. Start it here; its own setup and filtering interface opens separately.</p></div><span class="monitor-badge" id="aghRuntimeBadge">Checking</span></div>' +
+        '<div class="monitor-cards" id="aghRuntimeCards"></div><p class="hint" id="aghRuntimeMessage">Checking built-in server…</p>' +
+        '<div class="monitor-actions"><button class="primary" id="aghRuntimeStart">Start AdGuard Home</button><button class="ghost" id="aghRuntimeStop">Stop AdGuard Home</button><label class="monitor-inline-check"><input type="checkbox" id="aghRuntimeAutostart" /> Start with LANVault when the TV boots</label></div>' +
+        '<div id="aghRuntimeLinks" class="monitor-link-list"></div>' +
+        '<details class="monitor-details"><summary>AdGuard Home runtime log</summary><pre class="monitor-json" id="aghRuntimeLog">—</pre></details>' +
+        '<p class="hint">For router-wide ad blocking, configure the router DHCP/DNS server address to this TV and use DNS port 53. If Android denies port 53 binding, the built-in service can still be managed here but cannot serve normal router DNS without a supported privileged-port/root or router-side forwarding arrangement.</p></section>' +
+        '<section class="monitor-section"><div class="monitor-heading"><div><h3>Connect to another AdGuard Home (optional)</h3><p class="hint">Use this only if you also have a separate AdGuard Home server elsewhere.</p></div><span class="monitor-badge" id="monitorHomeBadge">Not configured</span></div>' +
         '<div class="monitor-form-grid"><div class="field"><div><label for="monitorHomeUrl">AdGuard Home base URL</label><div class="desc">Example: http://192.168.1.20:3000. Use the origin only, not /control.</div></div><input type="text" id="monitorHomeUrl" placeholder="http://192.168.1.20:3000" autocomplete="url" /></div>' +
         '<div class="field"><div><label for="monitorHomeUser">Admin username</label></div><input type="text" id="monitorHomeUser" autocomplete="username" /></div>' +
         '<div class="field"><div><label for="monitorHomePassword">Admin password</label><div class="desc">Encrypted on the TV using Android Keystore.</div></div><input type="password" id="monitorHomePassword" autocomplete="current-password" /></div></div>' +
@@ -876,6 +944,9 @@
       '</div>';
 
     document.getElementById('monitorRefresh').addEventListener('click', refreshMonitoringData);
+    document.getElementById('aghRuntimeStart').addEventListener('click', startEmbeddedAdGuardHome);
+    document.getElementById('aghRuntimeStop').addEventListener('click', stopEmbeddedAdGuardHome);
+    document.getElementById('aghRuntimeAutostart').addEventListener('change', setEmbeddedAdGuardHomeAutostart);
     document.getElementById('monitorHomeSave').addEventListener('click', saveHomeMonitor);
     document.getElementById('monitorHomeForget').addEventListener('click', forgetHomeMonitor);
     document.getElementById('monitorCloudSignInButton').addEventListener('click', signInCloudMonitor);
@@ -908,7 +979,7 @@
       }, null, 2);
       document.getElementById('monitorProxyPort').value = data.everyProxyPort || 0;
       document.getElementById('monitorAuthWarning').style.display = 'none';
-      return monitorApi('/api/monitoring/home');
+      return refreshEmbeddedAdGuardHome().then(function () { return monitorApi('/api/monitoring/home'); });
     }).then(function (home) {
       document.getElementById('monitorHomeBadge').textContent = !home.configured ? 'Not configured' : (home.connected ? 'Connected' : 'Connection issue');
       setMonitorText('monitorHomeMessage', home.message || 'No status available.');

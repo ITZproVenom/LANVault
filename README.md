@@ -107,6 +107,16 @@ Everything below is editable at `/ui/` → **Settings** while the server is runn
 | Keep CPU awake | Stops the screen dimming from interrupting a transfer. |
 | Serve WebDAV | Turns the WebDAV share off, leaving only the web interface. |
 
+## Built-in AdGuard Home service
+
+The Network Monitor page now includes an actual AdGuard Home service, not just a connector. CI builds upstream AdGuard Home `v0.107.79` for Android ARMv7 and ARM64, includes both Android executables and the GPL-3.0 license in the APK, and the app selects the matching binary for the device. The binaries are built for `GOOS=android`; this avoids relying on the wrong-architecture Linux `386` binary.
+
+Start or stop the built-in service from **Network Monitor → AdGuard Home on this TV**. On first start, open its setup page at port 3000 and complete setup. Use the AdGuard Home web UI to configure upstream DNS, blocklists, clients, and query logging. The optional “Connect to another AdGuard Home” fields remain for a separate instance.
+
+For network-wide DNS filtering, reserve a stable IP for the TV and set that IP as the router's DHCP DNS server after AdGuard Home is running and answering DNS. AdGuard Home normally needs to listen on port 53. Android may deny a non-root application the ability to bind privileged port 53; if that occurs, the UI will not claim router-wide blocking is working. A high DNS port can be useful for testing but most router DNS settings cannot specify a custom port. Do not change router DNS until the service is healthy and a recovery path is available.
+
+The bundled upstream component is AdGuard Home v0.107.79 under GPL-3.0. Its corresponding source is available at https://github.com/AdguardTeam/AdGuardHome/tree/v0.107.79 and the upstream license is included in the APK assets.
+
 ## Network monitoring
 
 The **Network monitor** tab is read-only and does not replace Every Proxy or AdGuard VPN.
