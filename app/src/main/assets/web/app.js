@@ -655,7 +655,7 @@
 
       '<h3>Access links</h3>' +
       addressList('Web interface', 'ui/') +
-      addressList('WebDAV URL (WebDAV-compatible client)', '') +
+      addressList('iPhone Files server URL (HTTP WebDAV endpoint)', '') +
       addressNote(addresses) +
       '<div class="link-box" style="flex-direction:column;align-items:flex-start">' +
       '<strong>Connecting from an iPhone</strong>' +
@@ -670,7 +670,7 @@
       '<h3>Server</h3>' +
       fieldNumber('serverPort', 'WebDAV &amp; web port', 'Port used by both the web interface and iPhone Files.') +
       fieldText('deviceName', 'Server name', 'Shown to WebDAV-compatible clients.') +
-      fieldCheck('shareWebdav', 'Serve WebDAV for compatible clients', 'This is an HTTP WebDAV endpoint, not an SMB server. The native iPhone Files “Connect to Server” dialog rejects this URL; leave enabled for WebDAV clients.') +
+      fieldCheck('shareWebdav', 'Enable Files server (WebDAV)', 'The WebDAV file server stays enabled at the URL above. The native iOS Files “Connect to Server” dialog currently rejects this plain HTTP endpoint; that does not mean the server was removed. SMB is not enabled.') +
 
       '<h3>Access control</h3>' +
       fieldCheck('requireAuth', 'Require a username and password', 'Applies to the web interface and to iPhone Files.') +
@@ -768,9 +768,9 @@
     var port = state.info.port || 8081;
     var webUrl = 'http://' + ip + ':' + port + '/ui/';
     var webdavUrl = 'http://' + ip + ':' + port + '/';
-    return 'Open <a href="' + escapeHtml(webUrl) + '">' + escapeHtml(webUrl) + '</a> in Safari to browse and stream files. ' +
-      'The WebDAV endpoint is <code>' + escapeHtml(webdavUrl) + '</code> for a WebDAV-compatible client. ' +
-      'The native iPhone Files “Connect to Server” dialog rejects this HTTP URL; LANVault intentionally does not provide SMB.';
+    return 'Files server endpoint: <code>' + escapeHtml(webdavUrl) + '</code> (HTTP WebDAV). It remains enabled when “Enable Files server (WebDAV)” is on. ' +
+      'Your native iPhone Files “Connect to Server” dialog rejects this plain HTTP endpoint, so use <a href="' + escapeHtml(webUrl) + '">' +
+      escapeHtml(webUrl) + '</a> in Safari or use a WebDAV-compatible client. LANVault intentionally does not provide SMB.';
   }
 
   function fieldText(id, label, desc) {
