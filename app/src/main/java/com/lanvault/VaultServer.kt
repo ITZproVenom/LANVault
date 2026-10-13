@@ -185,7 +185,7 @@ class VaultServer(
             }
             if (!authorized(request, settings)) {
                 return HttpResponse.status(401, "Unauthorized").apply {
-                    header("WWW-Authenticate", "Basic realm=\\\"LANVault monitoring\\\"")
+                    header("WWW-Authenticate", "Basic realm=\"LANVault monitoring\"")
                     header("Content-Type", "text/plain; charset=utf-8")
                     header("Content-Length", "0")
                 }
@@ -196,7 +196,7 @@ class VaultServer(
         if (request.path.startsWith("/api/") || request.path == "/api") {
             if (settings.requireAuth && !authorized(request, settings)) {
                 return HttpResponse.status(401, "Unauthorized").apply {
-                    header("WWW-Authenticate", "Basic realm=\\\"LANVault\\\"")
+                    header("WWW-Authenticate", "Basic realm=\"LANVault\"")
                     header("Content-Type", "text/plain; charset=utf-8")
                     header("Content-Length", "0")
                 }
