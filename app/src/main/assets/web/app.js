@@ -655,7 +655,7 @@
 
       '<h3>Access links</h3>' +
       addressList('Web interface', 'ui/') +
-      addressList('iPhone Files &gt; Connect to Server', '') +
+      addressList('WebDAV URL (WebDAV-compatible client)', '') +
       addressNote(addresses) +
       '<div class="link-box" style="flex-direction:column;align-items:flex-start">' +
       '<strong>Connecting from an iPhone</strong>' +
@@ -669,8 +669,8 @@
         : '') +
       '<h3>Server</h3>' +
       fieldNumber('serverPort', 'WebDAV &amp; web port', 'Port used by both the web interface and iPhone Files.') +
-      fieldText('deviceName', 'Server name', 'Shown to iPhone Files as the share name.') +
-      fieldCheck('shareWebdav', 'Serve WebDAV to iPhone Files', 'Needed for “Connect to Server”. Turning this off leaves only the web interface.') +
+      fieldText('deviceName', 'Server name', 'Shown to WebDAV-compatible clients.') +
+      fieldCheck('shareWebdav', 'Serve WebDAV for compatible clients', 'This is an HTTP WebDAV endpoint, not an SMB server. The native iPhone Files “Connect to Server” dialog rejects this URL; leave enabled for WebDAV clients.') +
 
       '<h3>Access control</h3>' +
       fieldCheck('requireAuth', 'Require a username and password', 'Applies to the web interface and to iPhone Files.') +
@@ -758,30 +758,19 @@
   }
 
   /*
-   * The Files app has two branches and picking the wrong one strands the user on a
-   * username screen. Say which to take instead of always recommending Registered User,
-   * which is only correct once a password has been set here.
+   * The native iOS Files "Connect to Server" sheet does not accept LANVault's HTTP WebDAV URL.
+   * Do not tell users to paste it there. With no SMB server by design, use the browser UI or
+   * a WebDAV-capable client for direct WebDAV access.
    */
   function iphoneInstructions() {
-    var address = state.info.webdavUrl || ('http://<tv-ip>:' + state.info.port + '/');
-    var all = (state.info.ipv4Addresses || []).map(function (a) {
-      return 'http://' + a + ':' + state.info.port + '/';
-    });
-    if (all.length) {
-      address = all.join(' or ');
-      if (state.reachableAddress && all.indexOf('http://' + state.reachableAddress + ':' + state.info.port + '/') >= 0) {
-        address = 'http://' + state.reachableAddress + ':' + state.info.port + '/';
-      }
-    }
-    if (state.requiresAuth) {
-      return 'Open ' + escapeHtml(address) + ' in Files → Browse → … → Connect to Server, ' +
-        'choose <strong>Registered User</strong>, then sign in with username ' +
-        '<strong>' + escapeHtml(state.settings.username || 'lanvault') + '</strong> and the ' +
-        'password set below.';
-    }
-    return 'Open ' + escapeHtml(address) + ' in Files → Browse → … → Connect to Server and ' +
-      'choose <strong>Guest</strong>. No username or password is needed unless you turn on ' +
-      'the password option below.';
+    var ip = state.reachableAddress ||
+      (state.info.ipv4Addresses || [])[0] || '<tv-ip>';
+    var port = state.info.port || 8081;
+    var webUrl = 'http://' + ip + ':' + port + '/ui/';
+    var webdavUrl = 'http://' + ip + ':' + port + '/';
+    return 'Open <a href="' + escapeHtml(webUrl) + '">' + escapeHtml(webUrl) + '</a> in Safari to browse and stream files. ' +
+      'The WebDAV endpoint is <code>' + escapeHtml(webdavUrl) + '</code> for a WebDAV-compatible client. ' +
+      'The native iPhone Files “Connect to Server” dialog rejects this HTTP URL; LANVault intentionally does not provide SMB.';
   }
 
   function fieldText(id, label, desc) {
@@ -854,11 +843,12 @@
       document.getElementById('aghRuntimeAutostart').checked = !!data.autoStart;
       document.getElementById('aghRuntimeStart').disabled = !!data.running || !data.binaryBundled || !data.supportedAbi;
       document.getElementById('aghRuntimeStop').disabled = !data.running;
+      document.getElementById('aghRuntimeCredentialsButton').disabled = !data.adminCredentialsAvailable;
       document.getElementById('aghRuntimeCards').innerHTML = [
         ['Bundled version', data.version || '—'],
         ['Android ABI', data.abi || 'Unknown'],
         ['Admin interface', data.adminReachable ? 'Reachable' : 'Not reachable'],
-        ['DNS TCP port 53', data.dnsTcpReachable ? 'Reachable' : 'Not detected']
+        ['DNS port ' + String(data.dnsPort || 5353), data.dnsTcpReachable ? 'TCP listener detected' : 'TCP listener not detected']
       ].map(function (card) {
         return '<div class="monitor-card"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(String(card[1])) + '</strong></div>';
       }).join('');
@@ -883,6 +873,21 @@
       setMonitorText('aghRuntimeMessage', error.message);
       toast(error.message);
       return refreshEmbeddedAdGuardHome();
+    }).then(function () { button.disabled = false; });
+  }
+
+  function showEmbeddedAdGuardHomeCredentials() {
+    var button = document.getElementById('aghRuntimeCredentialsButton');
+    var target = document.getElementById('aghRuntimeCredentials');
+    button.disabled = true;
+    target.style.display = '';
+    target.textContent = 'Reading encrypted first-run credentials…';
+    monitorApi('/api/monitoring/embedded/credentials', 'POST', {}).then(function (data) {
+      target.textContent = data.available
+        ? 'Username: ' + data.username + '\nPassword: ' + data.password + '\n\nOpen the AdGuard Home dashboard link above, sign in, and change this password.'
+        : (data.message || 'No generated login is available.');
+    }).catch(function (error) {
+      target.textContent = error.message;
     }).then(function () { button.disabled = false; });
   }
 
@@ -920,10 +925,11 @@
         '<div class="monitor-proxy-form"><label for="monitorProxyPort">Every Proxy listening port <span>0 disables the check</span></label><div class="monitor-form-row"><input type="number" id="monitorProxyPort" min="0" max="65535" placeholder="e.g. 8080" /><button id="monitorProxySave">Save port</button></div><p class="hint" id="monitorProxyMessage">Checks whether a TCP listener responds on 127.0.0.1. It does not change Every Proxy.</p></div></section>' +
         '<section class="monitor-section"><div class="monitor-heading"><div><h3>AdGuard Home on this TV</h3><p class="hint">The actual AdGuard Home server is bundled into this APK for Android ARM/ARM64. Start it here; its own setup and filtering interface opens separately.</p></div><span class="monitor-badge" id="aghRuntimeBadge">Checking</span></div>' +
         '<div class="monitor-cards" id="aghRuntimeCards"></div><p class="hint" id="aghRuntimeMessage">Checking built-in server…</p>' +
-        '<div class="monitor-actions"><button class="primary" id="aghRuntimeStart">Start AdGuard Home</button><button class="ghost" id="aghRuntimeStop">Stop AdGuard Home</button><label class="monitor-inline-check"><input type="checkbox" id="aghRuntimeAutostart" /> Start with LANVault when the TV boots</label></div>' +
+        '<div class="monitor-actions"><button class="primary" id="aghRuntimeStart">Start AdGuard Home</button><button class="ghost" id="aghRuntimeStop">Stop AdGuard Home</button><button class="ghost" id="aghRuntimeCredentialsButton">Show generated admin login</button><label class="monitor-inline-check"><input type="checkbox" id="aghRuntimeAutostart" /> Start with LANVault when the TV boots</label></div>' +
+        '<pre class="monitor-json" id="aghRuntimeCredentials" style="display:none">—</pre>' +
         '<div id="aghRuntimeLinks" class="monitor-link-list"></div>' +
         '<details class="monitor-details"><summary>AdGuard Home runtime log</summary><pre class="monitor-json" id="aghRuntimeLog">—</pre></details>' +
-        '<p class="hint">For router-wide ad blocking, configure the router DHCP/DNS server address to this TV and use DNS port 53. If Android denies port 53 binding, the built-in service can still be managed here but cannot serve normal router DNS without a supported privileged-port/root or router-side forwarding arrangement.</p></section>' +
+        '<p class="hint">This build uses DNS port 5353 so AdGuard Home can run without root. You can manage filtering and use the dashboard, but a typical router expects DNS on port 53. Router-wide ad blocking requires a supported privileged port-53 setup or a router-side forwarding rule; do not point router DNS here until DNS is confirmed reachable.</p></section>' +
         '<section class="monitor-section"><div class="monitor-heading"><div><h3>Connect to another AdGuard Home (optional)</h3><p class="hint">Use this only if you also have a separate AdGuard Home server elsewhere.</p></div><span class="monitor-badge" id="monitorHomeBadge">Not configured</span></div>' +
         '<div class="monitor-form-grid"><div class="field"><div><label for="monitorHomeUrl">AdGuard Home base URL</label><div class="desc">Example: http://192.168.1.20:3000. Use the origin only, not /control.</div></div><input type="text" id="monitorHomeUrl" placeholder="http://192.168.1.20:3000" autocomplete="url" /></div>' +
         '<div class="field"><div><label for="monitorHomeUser">Admin username</label></div><input type="text" id="monitorHomeUser" autocomplete="username" /></div>' +
@@ -946,6 +952,7 @@
     document.getElementById('monitorRefresh').addEventListener('click', refreshMonitoringData);
     document.getElementById('aghRuntimeStart').addEventListener('click', startEmbeddedAdGuardHome);
     document.getElementById('aghRuntimeStop').addEventListener('click', stopEmbeddedAdGuardHome);
+    document.getElementById('aghRuntimeCredentialsButton').addEventListener('click', showEmbeddedAdGuardHomeCredentials);
     document.getElementById('aghRuntimeAutostart').addEventListener('change', setEmbeddedAdGuardHomeAutostart);
     document.getElementById('monitorHomeSave').addEventListener('click', saveHomeMonitor);
     document.getElementById('monitorHomeForget').addEventListener('click', forgetHomeMonitor);
