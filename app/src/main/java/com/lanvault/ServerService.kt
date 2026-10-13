@@ -39,6 +39,12 @@ class ServerService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         val action = intent?.action
         when (action) {
+            ACTION_ADGUARD_HOME_ONLY -> {
+                AppRuntime.stopServer()
+                Thread({
+                    runCatching { AdGuardHomeRuntime.get(this).startIfEnabled() }
+                }, "lanvault-adguardhome-autostart").start()
+            }
             ACTION_STOP -> {
                 AppRuntime.settingsStore.update { it.copy(autoStartOnBoot = false) }
                 AppRuntime.stopServer()
@@ -163,9 +169,18 @@ class ServerService : LifecycleService() {
         const val CHANNEL_ID = "lanvault_server"
         const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.lanvault.action.STOP"
+        const val ACTION_ADGUARD_HOME_ONLY = "com.lanvault.action.ADG_HOME_ONLY"
 
         fun start(context: Context) {
             val intent = Intent(context, ServerService::class.java)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            }
+        }
+
+        fun startAdGuardHomeOnly(context: Context) {
+            val intent = Intent(context, ServerService::class.java).setAction(ACTION_ADGUARD_HOME_ONLY)
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)
