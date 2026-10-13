@@ -67,7 +67,7 @@ class AdGuardHomeRuntime private constructor(context: Context) {
                 assetPath == null -> "This TV ABI has no bundled AdGuard Home Android build."
                 !bundled -> "The AdGuard Home Android binary is missing from this APK. Install a CI-built APK."
                 running && probeTcp(adminPort) && dnsPort == UNPRIVILEGED_DNS_PORT ->
-                    "AdGuard Home is running. Its dashboard is available, but DNS uses port 5353 because an ordinary Android app cannot bind port 53. Router-wide DNS filtering needs a privileged port-53 path."
+                    "AdGuard Home is running. Its dashboard is available, but DNS uses port 53535 because an ordinary Android app cannot bind port 53. Router-wide DNS filtering needs a privileged port-53 path."
                 running && probeTcp(adminPort) ->
                     "AdGuard Home is running with DNS configured on port " + dnsPort + ". Verify the DNS listener before changing your router."
                 running -> "AdGuard Home process is running; its admin interface has not answered on port " + adminPort + " yet."
@@ -176,7 +176,7 @@ class AdGuardHomeRuntime private constructor(context: Context) {
 
     /**
      * AdGuard Home's first-run path exits on Android when it can't bind port 53. Create a valid,
-     * authenticated config first so the dashboard can start without root. Use DNS port 5353 for
+     * authenticated config first so the dashboard can start without root. Use DNS port 535355 for
      * an ordinary Android process; standard router DNS requires a privileged port-53 arrangement.
      */
     private fun prepareInitialConfig(): Int {
@@ -382,7 +382,7 @@ class AdGuardHomeRuntime private constructor(context: Context) {
         private const val ADMIN_USERNAME = "admin"
         private const val ADMIN_PORT = 3000
         private const val DNS_PORT = 53
-        private const val UNPRIVILEGED_DNS_PORT = 5353
+        private const val UNPRIVILEGED_DNS_PORT = 53535
         private const val BCRYPT_COST = 10
         private const val GCM_IV_BYTES = 12
         private const val GCM_TAG_BITS = 128
