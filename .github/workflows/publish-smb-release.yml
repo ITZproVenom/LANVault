@@ -1,4 +1,4 @@
-name: Publish LANVault preview release
+name: Publish LANVault modern UI preview
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - feature/tv-network-monitor
     paths:
       - .github/workflows/publish-smb-release.yml
+      - .github/workflows/publish-modern-ui-release.yml
   workflow_dispatch:
 
 permissions:
@@ -13,28 +14,29 @@ permissions:
   contents: write
 
 concurrency:
-  group: lanvault-smb-preview-release-${{ github.sha }}
+  group: lanvault-modern-ui-release-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Select latest successful APK build
+      - name: Select the exact successful UI APK build
         id: build
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch "$GITHUB_REF_NAME" --json databaseId,status,conclusion,headSha --limit 100)"
-          match="$(printf '%s' "$runs" | jq -c '[.[] | select(.status == "completed" and .conclusion == "success")] | sort_by(.databaseId) | last // empty')"
+          target_sha="a467594f09eff4506b053f1be921e8a8d00381b6"
+          runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch feature/tv-network-monitor --json databaseId,status,conclusion,headSha --limit 100)"
+          match="$(printf '%s' "$runs" | jq -c --arg sha "$target_sha" '[.[] | select(.headSha == $sha and .status == "completed" and .conclusion == "success")] | sort_by(.databaseId) | last // empty')"
           if [ -z "$match" ]; then
-            echo "No successful APK build is available to publish."
+            echo "No successful APK build found for exact source commit $target_sha."
             exit 1
           fi
           run_id="$(printf '%s' "$match" | jq -r '.databaseId')"
           source_sha="$(printf '%s' "$match" | jq -r '.headSha')"
-          echo "Publishing the verified APK from build $run_id ($source_sha)."
+          echo "Publishing verified UI APK from build $run_id ($source_sha)."
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
 
@@ -50,28 +52,29 @@ jobs:
             find release-artifact -maxdepth 3 -type f -print
             exit 1
           fi
-          cp "$apk" lanvault-1.0.3-smb-preview.apk
-          sha256sum lanvault-1.0.3-smb-preview.apk > SHA256SUMS.txt
-          test -s lanvault-1.0.3-smb-preview.apk
-          file lanvault-1.0.3-smb-preview.apk
+          asset="lanvault-1.0.4-modern-ui-preview.apk"
+          cp "$apk" "$asset"
+          sha256sum "$asset" > SHA256SUMS.txt
+          test -s "$asset"
+          file "$asset"
           cat SHA256SUMS.txt
 
-      - name: Publish APK to GitHub Releases
+      - name: Publish the modern UI preview
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="v1.0.3-smb-preview"
+          tag="v1.0.4-modern-ui-preview"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite a published release."
             exit 1
           fi
           gh release create "$tag" \
-            lanvault-1.0.3-smb-preview.apk \
+            lanvault-1.0.4-modern-ui-preview.apk \
             SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --target "${{ steps.build.outputs.source_sha }}" \
-            --title "LANVault 1.0.3 SMB preview" \
+            --title "LANVault 1.0.4 Modern UI preview" \
             --prerelease \
-            --notes "Preview build from commit $GITHUB_SHA. Adds a bundled SMB2/3 server for native iPhone Files while retaining WebDAV. Built and uploaded only after the matching Android build, tests, APK assembly, and lint completed successfully. Not yet tested on the target Android TV device."
+            --notes "Modern UI preview built from commit ${{ steps.build.outputs.source_sha }}. Rebuilds the Android TV dashboard and browser interface from scratch. Includes the bundled AdGuard Home service and SMB2/3 support alongside WebDAV. Android unit tests, web JavaScript syntax check, release APK assembly, and lint passed in CI. Real Android TV and iPhone Files testing is still required."
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
