@@ -29,6 +29,9 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
+      - name: Check web JavaScript syntax
+        run: node --check app/src/main/assets/web/app.js
+
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
