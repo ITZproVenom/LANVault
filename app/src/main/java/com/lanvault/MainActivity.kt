@@ -5,7 +5,6 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
@@ -28,7 +27,6 @@ import java.util.Locale
  */
 class MainActivity : ComponentActivity() {
 
-    private lateinit var rootScroll: ScrollView
     private lateinit var statusLine: TextView
     private lateinit var statusBadge: TextView
     private lateinit var webInterfaceUrl: TextView
@@ -76,7 +74,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun bindViews() {
-        rootScroll = findViewById(R.id.rootScroll)
         statusLine = findViewById(R.id.statusLine)
         statusBadge = findViewById(R.id.statusBadge)
         webInterfaceUrl = findViewById(R.id.webInterfaceUrl)
@@ -215,7 +212,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderLogs() {
-        val lines = EventLog.shared.snapshot.value.takeLast(60)
+        val lines = EventLog.shared.snapshot.value.takeLast(12)
         if (lines.isEmpty()) {
             logView.text = "Waiting for activity…"
             return
@@ -226,7 +223,6 @@ class MainActivity : ComponentActivity() {
         }
         if (logView.text.toString() != text) {
             logView.text = text
-            rootScroll.post { rootScroll.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
 }
