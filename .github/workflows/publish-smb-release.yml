@@ -1,0 +1,90 @@
+name: Publish LANVault preview release
+
+on:
+  push:
+    branches:
+      - feature/tv-network-monitor
+    paths:
+      - .github/workflows/publish-smb-release.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: lanvault-smb-preview-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the matching APK build to pass
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=""
+          for attempt in $(seq 1 45); do
+            runs="$(gh run list --workflow build.yml --branch "$GITHUB_REF_NAME" --json databaseId,status,conclusion,headSha --limit 100)"
+            match="$(printf '%s' "$runs" | jq -c --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)] | first // empty')"
+            if [ -n "$match" ]; then
+              status="$(printf '%s' "$match" | jq -r '.status')"
+              conclusion="$(printf '%s' "$match" | jq -r '.conclusion // empty')"
+              run_id="$(printf '%s' "$match" | jq -r '.databaseId')"
+              if [ "$status" = "completed" ]; then
+                if [ "$conclusion" != "success" ]; then
+                  echo "The APK build for $GITHUB_SHA did not pass: $conclusion"
+                  exit 1
+                fi
+                echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "APK build $run_id is $status; waiting (attempt $attempt/45)."
+            else
+              echo "Waiting for the APK build to appear (attempt $attempt/45)."
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for a successful APK build for $GITHUB_SHA."
+          exit 1
+
+      - name: Download the verified APK artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "${{ steps.build.outputs.run_id }}" --repo "$GITHUB_REPOSITORY" --name lanvault-release-apk --dir release-artifact
+          apk="$(find release-artifact -type f -name '*.apk' -print -quit)"
+          if [ -z "$apk" ]; then
+            echo "No APK was found in the successful workflow artifact."
+            find release-artifact -maxdepth 3 -type f -print
+            exit 1
+          fi
+          cp "$apk" lanvault-1.0.3-smb-preview.apk
+          sha256sum lanvault-1.0.3-smb-preview.apk > SHA256SUMS.txt
+          test -s lanvault-1.0.3-smb-preview.apk
+          file lanvault-1.0.3-smb-preview.apk
+          cat SHA256SUMS.txt
+
+      - name: Publish APK to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v1.0.3-smb-preview"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to overwrite a published release."
+            exit 1
+          fi
+          gh release create "$tag" \
+            lanvault-1.0.3-smb-preview.apk \
+            SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "LANVault 1.0.3 SMB preview" \
+            --prerelease \
+            --notes "Preview build from commit $GITHUB_SHA. Adds a bundled SMB2/3 server for native iPhone Files while retaining WebDAV. Built and uploaded only after the matching Android build, tests, APK assembly, and lint completed successfully. Not yet tested on the target Android TV device."
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
