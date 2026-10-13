@@ -41,11 +41,28 @@ class ServerService : LifecycleService() {
         when (action) {
             ACTION_STOP -> {
                 AppRuntime.settingsStore.update { it.copy(autoStartOnBoot = false) }
+                AppRuntime.stopServer()
+                val homeStatus = AdGuardHomeRuntime.get(this).status()
+                if (homeStatus.optBoolean("running") || homeStatus.optBoolean("autoStart")) {
+                    // Stop file sharing without killing the AdGuard Home DNS server.
+                    startForegroundCompat(buildNotification())
+                    return START_STICKY
+                }
                 stopSelf()
                 return START_NOT_STICKY
             }
             else -> {
-                AppRuntime.startServer(this)
+                val shouldStartServer = !(intent == null && !AppRuntime.settingsStore.current().autoStartOnBoot)
+                if (shouldStartServer) {
+                    AppRuntime.startServer(this)
+                } else {
+                    // START_STICKY may redeliver a null intent after file sharing was stopped.
+                    AppRuntime.stopServer()
+                    if (!AdGuardHomeRuntime.get(this).status().optBoolean("autoStart")) {
+                        stopSelf()
+                        return START_NOT_STICKY
+                    }
+                }
                 Thread({
                     runCatching { AdGuardHomeRuntime.get(this).startIfEnabled() }
                 }, "lanvault-adguardhome-autostart").start()
@@ -69,6 +86,7 @@ class ServerService : LifecycleService() {
         val port = AppRuntime.server?.port ?: settings.serverPort
         val addresses = NetworkAddresses.ipv4()
         val host = addresses.firstOrNull() ?: "this-tv"
+        val sharing = AppRuntime.server?.isRunning == true
         val openIntent = Intent(this, MainActivity::class.java)
         val pendingOpen = PendingIntent.getActivity(
             this,
@@ -83,20 +101,30 @@ class ServerService : LifecycleService() {
             stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val content = if (sharing) {
+            "http://" + host + ":" + port + "/ui/ · WebDAV on port " + port
+        } else {
+            "File sharing stopped; AdGuard Home may remain active."
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_server)
-            .setContentTitle("LANVault is sharing storage")
-            .setContentText("http://$host:${port}/ui/ · WebDAV on port ${port}")
+            .setContentTitle(if (sharing) "LANVault is sharing storage" else "LANVault network services")
+            .setContentText(content)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
                         buildString {
-                            append("Web interface: ")
-                            append(addresses.joinToString("  ") { "http://$it:${port}/ui/" }.ifEmpty { host })
-                            append("\niPhone Files > Connect to Server: ")
-                            append(addresses.joinToString("  ") { "http://$it:${port}/" }.ifEmpty { host })
-                            append("\nUse the address on the same network as your device. " +
-                                "All settings are in the web interface.")
+                            if (sharing) {
+                                append("Web interface: ")
+                                append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/ui/" }.ifEmpty { host })
+                                append("\niPhone Files > Connect to Server: ")
+                                append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/" }.ifEmpty { host })
+                                append("\nUse the address on the same network as your device. ")
+                                append("All settings and monitoring are controlled from the web interface.")
+                            } else {
+                                append("File sharing is stopped. The bundled AdGuard Home DNS service can remain active; ")
+                                append("manage it from Network Monitor in the web interface.")
+                            }
                         },
                     ),
             )

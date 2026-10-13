@@ -37,6 +37,8 @@ jobs:
         run: |
           set -euxo pipefail
           cd .ci/AdGuardHome
+          # AdGuard Home's build metadata script calculates master..HEAD; this checkout is a tag.
+          git branch master HEAD
           make js-deps
           make js-build
           make go-deps
