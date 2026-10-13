@@ -123,9 +123,10 @@ class ServerService : LifecycleService() {
                             if (sharing) {
                                 append("Web interface: ")
                                 append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/ui/" }.ifEmpty { host })
-                                append("\niPhone Files > Connect to Server: ")
+                                append("\nWebDAV URL (WebDAV-compatible clients): ")
                                 append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/" }.ifEmpty { host })
-                                append("\nUse the address on the same network as your device. ")
+                                append("\nOpen the /ui/ address in Safari to browse and stream files. ")
+                                append("The native iPhone Files Connect to Server dialog rejects this HTTP WebDAV URL; LANVault does not provide SMB. ")
                                 append("All settings and monitoring are controlled from the web interface.")
                             } else {
                                 append("File sharing is stopped. The bundled AdGuard Home DNS service can remain active; ")
