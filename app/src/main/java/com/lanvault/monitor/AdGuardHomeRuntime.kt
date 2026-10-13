@@ -14,12 +14,12 @@ import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.Socket
-import java.security.KeyGenerator
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.Collections
 import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 
 /**
