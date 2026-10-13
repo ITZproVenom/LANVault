@@ -134,6 +134,9 @@ class ApiServerTest {
         val denied = request("GET", "/api/monitoring/status")
         assertEquals(403, denied.code)
 
+        settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "lanvault") }
+        assertEquals(403, request("GET", "/api/monitoring/status", credentials = "lanvault" to "lanvault").code)
+
         settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "secret") }
         val allowed = json("GET", "/api/monitoring/status", credentials = "lanvault" to "secret")
         assertEquals(200, allowed.code)

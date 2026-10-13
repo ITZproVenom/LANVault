@@ -177,10 +177,10 @@ class VaultServer(
         val settings = settingsStore.current()
 
         if (request.path.startsWith("/api/monitoring")) {
-            if (!settings.requireAuth) {
+            if (!settings.requireAuth || settings.username.isBlank() || settings.password.isBlank() || (settings.username == "lanvault" && settings.password == "lanvault")) {
                 return HttpResponse.status(403, "Forbidden").apply {
                     header("Content-Type", "text/plain; charset=utf-8")
-                    bodyBytes = "Enable username/password protection in LANVault Settings before using network-monitoring integrations.".toByteArray(Charsets.UTF_8)
+                    bodyBytes = "Set a unique username and password in LANVault Settings before using network-monitoring integrations; default credentials are not accepted.".toByteArray(Charsets.UTF_8)
                 }
             }
             if (!authorized(request, settings)) {

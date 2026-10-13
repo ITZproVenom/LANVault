@@ -82,11 +82,11 @@ class ApiHandler(
             "monitoring/status" -> monitoringStatus()
             "monitoring/home" -> monitoringHome()
             "monitoring/home/config" -> configureMonitoringHome(request)
-            "monitoring/home/forget" -> forgetMonitoringHome()
+            "monitoring/home/forget" -> forgetMonitoringHome(request)
             "monitoring/cloud" -> monitoringCloud()
             "monitoring/cloud/login" -> signInMonitoringCloud(request)
-            "monitoring/cloud/refresh" -> refreshMonitoringCloud()
-            "monitoring/cloud/logout" -> signOutMonitoringCloud()
+            "monitoring/cloud/refresh" -> refreshMonitoringCloud(request)
+            "monitoring/cloud/logout" -> signOutMonitoringCloud(request)
             "monitoring/proxy" -> configureEveryProxy(request)
             else -> json(HttpResponse.status(404, "Not Found"), JSONObject().put("error", "Unknown endpoint"))
         }
@@ -574,8 +574,10 @@ class ApiHandler(
         }
     }
 
-    private fun forgetMonitoringHome(): HttpResponse =
-        json(HttpResponse.status(200, "OK"), networkMonitoring.forgetHome())
+    private fun forgetMonitoringHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        return json(HttpResponse.status(200, "OK"), networkMonitoring.forgetHome())
+    }
 
     private fun monitoringCloud(): HttpResponse =
         json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot())
@@ -594,12 +596,16 @@ class ApiHandler(
         }
     }
 
-    private fun refreshMonitoringCloud(): HttpResponse =
-        try { json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot(forceRefresh = true)) }
+    private fun refreshMonitoringCloud(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        return try { json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot(forceRefresh = true)) }
         catch (_: Throwable) { json(HttpResponse.status(502, "Bad Gateway"), JSONObject().put("error", "Could not refresh AdGuard DNS data.")) }
+    }
 
-    private fun signOutMonitoringCloud(): HttpResponse =
-        json(HttpResponse.status(200, "OK"), networkMonitoring.signOutCloud())
+    private fun signOutMonitoringCloud(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        return json(HttpResponse.status(200, "OK"), networkMonitoring.signOutCloud())
+    }
 
     private fun configureEveryProxy(request: HttpRequest): HttpResponse {
         if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))

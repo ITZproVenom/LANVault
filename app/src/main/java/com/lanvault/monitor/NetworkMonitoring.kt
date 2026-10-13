@@ -348,7 +348,7 @@ class NetworkMonitoring(context: Context) {
         }
         val scheme = uri.scheme?.lowercase(Locale.ROOT)
         val host = uri.host
-        if (scheme !in setOf("http", "https") || host.isNullOrBlank() || uri.rawUserInfo != null ||
+        if ((scheme != "http" && scheme != "https") || host.isNullOrBlank() || uri.rawUserInfo != null ||
             uri.rawQuery != null || uri.rawFragment != null ||
             (uri.rawPath.orEmpty().isNotBlank() && uri.rawPath != "/")) {
             throw MonitoringException(400, "Use the AdGuard Home origin only, without a path or credentials.")
