@@ -85,7 +85,9 @@ jobs:
           mkdir -p "$SMB_OUT"
           cp LICENSE "$SMB_OUT/LICENSE.txt"
           printf '%s\n' 'LANVault SMB2/3 server' 'Dependency: github.com/sonroyaalmerol/go-smb-server@d07dc723a2926177b4bc20c806d95cb2c3b1c70a' 'MIT license and source attribution included.' > "$SMB_OUT/SOURCE.txt"
-          CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm" .
+          ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang" \
+            CGO_ENABLED=1 GOOS=android GOARCH=arm GOARM=7 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm" .
           CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm64" .
           file "$SMB_OUT/lanvault-smb-android-arm"
           file "$SMB_OUT/lanvault-smb-android-arm64"
