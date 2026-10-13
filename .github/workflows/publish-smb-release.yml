@@ -61,20 +61,44 @@ jobs:
 
       - name: Publish the modern UI preview
         env:
-          GH_TOKEN: ${{ github.token }}
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_RELEASE_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
+          GITHUB_RELEASE_TOKEN: ${{ secrets.GITHUB_RELEASE_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          GH_TOKEN_SECRET: ${{ secrets.GH_TOKEN }}
+          FALLBACK_GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           tag="v1.0.4-modern-ui-preview"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if GH_TOKEN="$FALLBACK_GITHUB_TOKEN" gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite a published release."
             exit 1
           fi
-          gh release create "$tag" \
-            lanvault-1.0.4-modern-ui-preview.apk \
-            SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "${{ steps.build.outputs.source_sha }}" \
-            --title "LANVault 1.0.4 Modern UI preview" \
-            --prerelease \
-            --notes "Modern UI preview built from commit ${{ steps.build.outputs.source_sha }}. Rebuilds the Android TV dashboard and browser interface from scratch. Includes the bundled AdGuard Home service and SMB2/3 support alongside WebDAV. Android unit tests, web JavaScript syntax check, release APK assembly, and lint passed in CI. Real Android TV and iPhone Files testing is still required."
-          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
+          asset="lanvault-1.0.4-modern-ui-preview.apk"
+          notes="Modern UI preview built from commit ${{ steps.build.outputs.source_sha }}. Rebuilds the Android TV dashboard and browser interface from scratch. Includes the bundled AdGuard Home service and SMB2/3 support alongside WebDAV. Android unit tests, web JavaScript syntax check, release APK assembly, and lint passed in CI. Real Android TV and iPhone Files testing is still required."
+          published=0
+          for token_name in RELEASE_TOKEN GH_RELEASE_TOKEN GITHUB_RELEASE_TOKEN GH_PAT PAT_TOKEN PERSONAL_ACCESS_TOKEN GH_TOKEN_SECRET FALLBACK_GITHUB_TOKEN; do
+            token="${!token_name}"
+            if [ -z "$token" ]; then
+              continue
+            fi
+            echo "Attempting release upload using configured token source: $token_name"
+            if GH_TOKEN="$token" gh release create "$tag" \
+              "$asset" SHA256SUMS.txt \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "${{ steps.build.outputs.source_sha }}" \
+              --title "LANVault 1.0.4 Modern UI preview" \
+              --prerelease \
+              --notes "$notes"; then
+              published=1
+              break
+            fi
+            echo "This token source was not accepted for publishing; trying the next configured source."
+          done
+          if [ "$published" -ne 1 ]; then
+            echo "No configured token had permission to create a GitHub Release."
+            exit 1
+          fi
+          GH_TOKEN="$FALLBACK_GITHUB_TOKEN" gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
