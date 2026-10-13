@@ -176,7 +176,7 @@ class AdGuardHomeRuntime private constructor(context: Context) {
 
     /**
      * AdGuard Home's first-run path exits on Android when it can't bind port 53. Create a valid,
-     * authenticated config first so the dashboard can start without root. Use DNS port 535355 for
+     * authenticated config first so the dashboard can start without root. Use DNS port 53535 for
      * an ordinary Android process; standard router DNS requires a privileged port-53 arrangement.
      */
     private fun prepareInitialConfig(): Int {
