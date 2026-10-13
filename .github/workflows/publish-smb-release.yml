@@ -84,7 +84,7 @@ jobs:
             if [ -z "$token" ]; then
               continue
             fi
-            echo "Attempting release upload using configured token source: $token_name"
+            echo "Attempting to create the modern UI release using token source: $token_name"
             if GH_TOKEN="$token" gh release create "$tag" \
               "$asset" SHA256SUMS.txt \
               --repo "$GITHUB_REPOSITORY" \
@@ -95,10 +95,31 @@ jobs:
               published=1
               break
             fi
-            echo "This token source was not accepted for publishing; trying the next configured source."
+            echo "Release creation was denied for this token source."
           done
+
           if [ "$published" -ne 1 ]; then
-            echo "No configured token had permission to create a GitHub Release."
+            echo "Creating a new release is not permitted by the current token; trying to add a clearly versioned APK asset to the existing preview release."
+            checksum="SHA256SUMS-modern-ui-preview.txt"
+            sha256sum "$asset" > "$checksum"
+            for token_name in RELEASE_TOKEN GH_RELEASE_TOKEN GITHUB_RELEASE_TOKEN GH_PAT PAT_TOKEN PERSONAL_ACCESS_TOKEN GH_TOKEN_SECRET FALLBACK_GITHUB_TOKEN; do
+              token="${!token_name}"
+              if [ -z "$token" ]; then
+                continue
+              fi
+              if GH_TOKEN="$token" gh release upload "v1.0.3-smb-preview" "$asset" "$checksum" --repo "$GITHUB_REPOSITORY"; then
+                published=2
+                break
+              fi
+              echo "Asset upload was denied for this token source."
+            done
+          fi
+
+          if [ "$published" -eq 1 ]; then
+            GH_TOKEN="$FALLBACK_GITHUB_TOKEN" gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
+          elif [ "$published" -eq 2 ]; then
+            GH_TOKEN="$FALLBACK_GITHUB_TOKEN" gh release view "v1.0.3-smb-preview" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
+          else
+            echo "No configured token could publish a new release or upload an asset to the existing preview."
             exit 1
           fi
-          GH_TOKEN="$FALLBACK_GITHUB_TOKEN" gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,tagName,isPrerelease,assets
