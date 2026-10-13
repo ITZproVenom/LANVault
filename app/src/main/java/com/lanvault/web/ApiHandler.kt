@@ -15,6 +15,9 @@ import com.lanvault.storage.VaultNode
 import com.lanvault.storage.VolumeDirectorySnapshot
 import com.lanvault.storage.VolumeKind
 import com.lanvault.storage.slug
+import com.lanvault.monitor.NetworkMonitoring
+import com.lanvault.monitor.MonitoringException
+import com.lanvault.monitor.AdGuardHomeRuntime
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.Inet4Address
@@ -55,6 +58,8 @@ class ApiHandler(
 ) {
 
     private val fileSystem = VaultFileSystem(storageRepository, settingsStore)
+    private val networkMonitoring = NetworkMonitoring(server.monitoringContext)
+    private val embeddedAdGuardHome = AdGuardHomeRuntime.get(server.monitoringContext)
 
     fun handle(request: HttpRequest): HttpResponse {
         val action = request.path.removePrefix("/api").trim('/')
@@ -76,6 +81,20 @@ class ApiHandler(
             "logs" -> logs(request)
             "restart" -> restart(request)
             "clear-cache" -> clearCache(request)
+            "monitoring/status" -> monitoringStatus()
+            "monitoring/embedded" -> embeddedAdGuardHomeStatus()
+            "monitoring/embedded/credentials" -> embeddedAdGuardHomeCredentials(request)
+            "monitoring/embedded/start" -> startEmbeddedAdGuardHome(request)
+            "monitoring/embedded/stop" -> stopEmbeddedAdGuardHome(request)
+            "monitoring/embedded/autostart" -> setEmbeddedAdGuardHomeAutostart(request)
+            "monitoring/home" -> monitoringHome()
+            "monitoring/home/config" -> configureMonitoringHome(request)
+            "monitoring/home/forget" -> forgetMonitoringHome(request)
+            "monitoring/cloud" -> monitoringCloud()
+            "monitoring/cloud/login" -> signInMonitoringCloud(request)
+            "monitoring/cloud/refresh" -> refreshMonitoringCloud(request)
+            "monitoring/cloud/logout" -> signOutMonitoringCloud(request)
+            "monitoring/proxy" -> configureEveryProxy(request)
             else -> json(HttpResponse.status(404, "Not Found"), JSONObject().put("error", "Unknown endpoint"))
         }
     }
@@ -108,6 +127,7 @@ class ApiHandler(
                 .put("deviceName", settings.deviceName)
                 .put("ipv4Addresses", JSONArray(addresses))
                 .put("hostnames", JSONArray(NetworkAddresses.hostnames()))
+                .put("smbServer", server.smbStatus())
                 .put(
                     "webInterfaceUrl",
                     if (addresses.isEmpty()) null else "http://${addresses.first()}:$port/ui/",
@@ -156,6 +176,7 @@ class ApiHandler(
         .put("autoStartOnBoot", settings.autoStartOnBoot)
         .put("keepCpuAwake", settings.keepCpuAwake)
         .put("shareWebdav", settings.shareWebdav)
+        .put("shareSmb", settings.shareSmb)
 
     private fun volumes(request: HttpRequest): HttpResponse {
         val volumes = storageRepository.discover()
@@ -487,12 +508,14 @@ class ApiHandler(
                         "autoStartOnBoot" -> next = next.copy(autoStartOnBoot = flag)
                         "keepCpuAwake" -> next = next.copy(keepCpuAwake = flag)
                         "shareWebdav" -> next = next.copy(shareWebdav = flag)
+                        "shareSmb" -> next = next.copy(shareSmb = flag)
                     }
                 }
                 form["username"]?.let { if (it.isNotBlank()) next = next.copy(username = it.take(64)) }
                 form["password"]?.let { next = next.copy(password = it.take(128)) }
                 next
             }
+            server.syncSmb()
             val portChanged = true
             EventLog.shared.info("Settings updated from the web interface.")
             return json(
@@ -539,6 +562,116 @@ class ApiHandler(
                 .put("message", line.message)
         }
         return json(HttpResponse.status(200, "OK"), JSONObject().put("lines", JSONArray(lines)))
+    }
+
+
+
+    private fun embeddedAdGuardHomeStatus(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.status())
+
+    private fun embeddedAdGuardHomeCredentials(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") {
+            return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        }
+        readBody(request)
+        // VaultServer only routes /api/monitoring after LANVault's unique Basic credentials validate.
+        return json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.initialAdminCredentials())
+    }
+
+    private fun startEmbeddedAdGuardHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request)
+        return try {
+            json(HttpResponse.status(202, "Accepted"), embeddedAdGuardHome.start())
+        } catch (error: Throwable) {
+            val message = error.message?.take(700) ?: "AdGuard Home could not start."
+            json(HttpResponse.status(500, "Internal Server Error"), JSONObject().put("error", message))
+        }
+    }
+
+    private fun stopEmbeddedAdGuardHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request)
+        return json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.stop())
+    }
+
+    private fun setEmbeddedAdGuardHomeAutostart(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return json(HttpResponse.status(200, "OK"), embeddedAdGuardHome.setAutoStart(body.optBoolean("enabled", false)))
+    }
+
+    private fun monitoringStatus(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.status())
+
+    private fun monitoringHome(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.homeSnapshot())
+
+    private fun configureMonitoringHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return try {
+            json(HttpResponse.status(200, "OK"), networkMonitoring.configureHome(
+                body.optString("baseUrl"), body.optString("username"), body.optString("password"),
+            ))
+        } catch (error: MonitoringException) {
+            json(HttpResponse.status(error.statusCode, "Integration Error"), JSONObject().put("error", error.message ?: "Invalid AdGuard Home configuration."))
+        } catch (_: Throwable) {
+            json(HttpResponse.status(500, "Internal Server Error"), JSONObject().put("error", "Could not save AdGuard Home settings."))
+        }
+    }
+
+    private fun forgetMonitoringHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request) // Consume the empty JSON request body before keep-alive reuses the connection.
+        return json(HttpResponse.status(200, "OK"), networkMonitoring.forgetHome())
+    }
+
+    private fun monitoringCloud(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot())
+
+    private fun signInMonitoringCloud(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return try {
+            json(HttpResponse.status(200, "OK"), networkMonitoring.signInCloud(
+                body.optString("email"), body.optString("password"), body.optString("mfaCode"),
+            ))
+        } catch (error: MonitoringException) {
+            json(HttpResponse.status(error.statusCode, "Integration Error"), JSONObject().put("error", error.message ?: "AdGuard DNS sign-in failed."))
+        } catch (_: Throwable) {
+            json(HttpResponse.status(502, "Bad Gateway"), JSONObject().put("error", "AdGuard DNS sign-in failed."))
+        }
+    }
+
+    private fun refreshMonitoringCloud(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request) // Consume the empty JSON request body before keep-alive reuses the connection.
+        return try { json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot(forceRefresh = true)) }
+        catch (_: Throwable) { json(HttpResponse.status(502, "Bad Gateway"), JSONObject().put("error", "Could not refresh AdGuard DNS data.")) }
+    }
+
+    private fun signOutMonitoringCloud(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        readBody(request) // Consume the empty JSON request body before keep-alive reuses the connection.
+        return json(HttpResponse.status(200, "OK"), networkMonitoring.signOutCloud())
+    }
+
+    private fun configureEveryProxy(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return try {
+            json(HttpResponse.status(200, "OK"), networkMonitoring.setEveryProxyPort(body.optInt("port", 0)))
+        } catch (error: MonitoringException) {
+            json(HttpResponse.status(error.statusCode, "Bad Request"), JSONObject().put("error", error.message ?: "Invalid port."))
+        }
+    }
+
+    private fun parseJsonBody(request: HttpRequest): JSONObject? {
+        if (!request.header("Content-Type").orEmpty().contains("application/json", ignoreCase = true)) return null
+        val body = readBody(request)
+        if (body.isBlank()) return null
+        return runCatching { JSONObject(body) }.getOrNull()
     }
 
     private fun restart(request: HttpRequest): HttpResponse {

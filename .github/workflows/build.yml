@@ -12,13 +12,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check out AdGuard Home source
+        uses: actions/checkout@v4
+        with:
+          repository: AdguardTeam/AdGuardHome
+          ref: v0.107.79
+          path: .ci/AdGuardHome
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
+      - name: Set up Go for AdGuard Home
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.6'
+          cache: false
+
+      - name: Set up Node for AdGuard Home frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.10.0'
+          cache: npm
+          cache-dependency-path: .ci/AdGuardHome/client_v2/package-lock.json
+
+      - name: Install Android SDK and NDK
         run: |
           curl -sSL -o /tmp/cmdline-tools.zip \
             https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
@@ -27,7 +47,56 @@ jobs:
           mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.2.12479018"
+
+      - name: Build AdGuard Home for Android ARM and ARM64
+        run: |
+          set -euxo pipefail
+          cd .ci/AdGuardHome
+          make js-deps
+          make js-build
+          make go-deps
+          AGH_OUT="$GITHUB_WORKSPACE/app/src/main/assets/adguardhome"
+          mkdir -p "$AGH_OUT"
+          cp LICENSE.txt "$AGH_OUT/LICENSE.txt"
+          printf '%s\n' 'AdGuard Home v0.107.79' 'Source: https://github.com/AdguardTeam/AdGuardHome/tree/v0.107.79' 'Built for Android by LANVault CI; see upstream GPL-3.0 license.' > "$AGH_OUT/SOURCE.txt"
+          COMMIT_TIME="$(git log -1 --format=%ct)"
+          VERSION_PKG="github.com/AdguardTeam/AdGuardHome/internal/version"
+          LDFLAGS="-s -w -X $VERSION_PKG.version=v0.107.79 -X $VERSION_PKG.channel=release -X $VERSION_PKG.committime=$COMMIT_TIME -X $VERSION_PKG.goarm=7"
+          ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang" \
+            CGO_ENABLED=1 GOOS=android GOARCH=arm GOARM=7 \
+            go build -trimpath -ldflags="$LDFLAGS" -o "$AGH_OUT/AdGuardHome-android-arm" .
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
+            go build -trimpath -ldflags="$LDFLAGS" -o "$AGH_OUT/AdGuardHome-android-arm64" .
+          file "$AGH_OUT/AdGuardHome-android-arm"
+          file "$AGH_OUT/AdGuardHome-android-arm64"
+          test -s "$AGH_OUT/AdGuardHome-android-arm"
+          test -s "$AGH_OUT/AdGuardHome-android-arm64"
+          chmod 644 "$AGH_OUT/LICENSE.txt" "$AGH_OUT/SOURCE.txt"
+
+      - name: Build and test SMB2/3 server for Android
+        run: |
+          set -euxo pipefail
+          cd smb-server
+          go mod tidy
+          go test ./...
+          SMB_OUT="$GITHUB_WORKSPACE/app/src/main/assets/smb"
+          mkdir -p "$SMB_OUT"
+          cp LICENSE "$SMB_OUT/LICENSE.txt"
+          printf '%s\n' 'LANVault SMB2/3 server' 'Dependency: github.com/sonroyaalmerol/go-smb-server@d07dc723a2926177b4bc20c806d95cb2c3b1c70a' 'MIT license and source attribution included.' > "$SMB_OUT/SOURCE.txt"
+          ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          CC="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang" \
+            CGO_ENABLED=1 GOOS=android GOARCH=arm GOARM=7 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm" .
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm64" .
+          file "$SMB_OUT/lanvault-smb-android-arm"
+          file "$SMB_OUT/lanvault-smb-android-arm64"
+          test -s "$SMB_OUT/lanvault-smb-android-arm"
+          test -s "$SMB_OUT/lanvault-smb-android-arm64"
+          chmod 644 "$SMB_OUT/LICENSE.txt" "$SMB_OUT/SOURCE.txt"
+
+      - name: Check web JavaScript syntax
+        run: node --check app/src/main/assets/web/app.js
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --stacktrace

@@ -5,12 +5,12 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.lanvault.net.EventLog
 import com.lanvault.storage.VolumeKind
+import com.lanvault.SmbServerRuntime
 import com.lanvault.web.NetworkAddresses
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -27,7 +27,6 @@ import java.util.Locale
  */
 class MainActivity : ComponentActivity() {
 
-    private lateinit var rootScroll: ScrollView
     private lateinit var statusLine: TextView
     private lateinit var statusBadge: TextView
     private lateinit var webInterfaceUrl: TextView
@@ -75,7 +74,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun bindViews() {
-        rootScroll = findViewById(R.id.rootScroll)
         statusLine = findViewById(R.id.statusLine)
         statusBadge = findViewById(R.id.statusBadge)
         webInterfaceUrl = findViewById(R.id.webInterfaceUrl)
@@ -95,9 +93,8 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("SetTextI18n")
     private fun renderState() {
         val settings = AppRuntime.settingsStore.current()
-        // A TV often has several interfaces - Ethernet, Wi-Fi and sometimes a VPN or a
-        // developer bridge - and only one of them shares a network with the phone. Listing
-        // a single address and hoping it is the right one is what makes Connect to Server fail.
+        // A TV often has multiple interfaces, so list them all and let the browser UI identify
+        // the working address. The HTTP WebDAV URL is for compatible clients, not native iOS Files.
         val addresses = NetworkAddresses.ipv4()
         val server = AppRuntime.server
         val running = AppRuntime.running.value || server?.isRunning == true
@@ -127,12 +124,18 @@ class MainActivity : ComponentActivity() {
             "Server not running. Open the web interface to manage it."
         }
 
+        val smb = SmbServerRuntime.get(this).status()
+        val smbPort = smb.optInt("port", 0)
         if (addresses.isEmpty()) {
             webInterfaceUrl.text = "No network connection"
             webdavUrl.text = "Connect the TV to your network"
         } else {
             webInterfaceUrl.text = addresses.joinToString("\n") { "http://$it:$port/ui/" }
-            webdavUrl.text = addresses.joinToString("\n") { "http://$it:$port/" }
+            webdavUrl.text = if (smb.optBoolean("running") && smbPort > 0) {
+                addresses.joinToString("\n") { SmbServerRuntime.addr(it, smbPort) }
+            } else {
+                smb.optString("message", "SMB server starting")
+            }
         }
         networkNoteValue.text = if (addresses.size > 1) {
             "This TV has ${addresses.size} network addresses. Use the one on the same network " +
@@ -142,22 +145,18 @@ class MainActivity : ComponentActivity() {
         }
         networkNoteValue.visibility = if (addresses.size > 1) View.VISIBLE else View.GONE
 
-        // The iPhone flow has two branches, and picking the wrong one strands the user on a
-        // username screen. Say which one to take instead of always recommending Registered User,
-        // which is only correct once a password has been set in the web interface.
+        webdavHint.text = if (smb.optBoolean("running") && smbPort > 0) {
+            "Files → Browse → … → Connect to Server. Enter the SMB address above. " +
+                if (settings.requireAuth) "Choose Registered User and use the LANVault username/password."
+                else "Choose Guest; no password is required."
+        } else {
+            smb.optString("message", "Starting the SMB2/3 file server…")
+        }
         if (settings.requireAuth) {
-            webdavHint.text = buildString {
-                append("Files app → Browse → … → Connect to Server. ")
-                append("Choose Registered User, then enter \"")
-                append(settings.username)
-                append("\" and the password you set in the web interface.")
-            }
-            authStateValue.text = "A username and password are required to connect."
+            authStateValue.text = "SMB and protected server/API access require the LANVault username and password."
             authStateValue.setTextColor(resources.getColor(R.color.warning, theme))
         } else {
-            webdavHint.text =
-                "Files app → Browse → … → Connect to Server. Choose Guest — no username or password needed."
-            authStateValue.text = "Open access: any device on this network can connect without a password."
+            authStateValue.text = "SMB Guest access is enabled. HTTP WebDAV remains available for compatible clients."
             authStateValue.setTextColor(resources.getColor(R.color.text_secondary, theme))
         }
 
@@ -181,7 +180,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun refreshVolumes() {
-        val volumes = withContext(Dispatchers.IO) { AppRuntime.storageRepository.discover() }
+        val volumes = withContext(Dispatchers.IO) {
+            AppRuntime.storageRepository.discover().also { AppRuntime.server?.syncSmb() }
+        }
         val readable = volumes.filter { it.readable }
         visibleDrives = readable.map { it.displayName }
         driveSummary = if (readable.isEmpty()) {
@@ -211,7 +212,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderLogs() {
-        val lines = EventLog.shared.snapshot.value.takeLast(60)
+        val lines = EventLog.shared.snapshot.value.takeLast(12)
         if (lines.isEmpty()) {
             logView.text = "Waiting for activity…"
             return
@@ -222,7 +223,6 @@ class MainActivity : ComponentActivity() {
         }
         if (logView.text.toString() != text) {
             logView.text = text
-            rootScroll.post { rootScroll.fullScroll(ScrollView.FOCUS_DOWN) }
         }
     }
 }

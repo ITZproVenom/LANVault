@@ -11,6 +11,7 @@ import android.os.Environment
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.lanvault.net.EventLog
+import com.lanvault.monitor.AdGuardHomeRuntime
 
 /** Brings the server up again after the TV boots or after the app is updated. */
 class BootReceiver : BroadcastReceiver() {
@@ -24,12 +25,20 @@ class BootReceiver : BroadcastReceiver() {
         if (!supported) return
 
         AppRuntime.initialize(context)
-        if (!AppRuntime.settingsStore.current().autoStartOnBoot) {
-            EventLog.shared.info("Auto start is off, not launching after ${action.substringAfterLast('.')}.")
-            return
+        val event = action.substringAfterLast('.')
+        val serverAutoStart = AppRuntime.settingsStore.current().autoStartOnBoot
+        val adGuardAutoStart = AdGuardHomeRuntime.get(context).status().optBoolean("autoStart")
+        when {
+            serverAutoStart -> {
+                EventLog.shared.info("Device signal received ($event), starting LANVault.")
+                ServerService.start(context)
+            }
+            adGuardAutoStart -> {
+                EventLog.shared.info("Device signal received ($event), starting AdGuard Home without LANVault file sharing.")
+                ServerService.startAdGuardHomeOnly(context)
+            }
+            else -> EventLog.shared.info("LANVault and AdGuard Home auto-start are off; not launching after $event.")
         }
-        EventLog.shared.info("Device signal received (${action.substringAfterLast('.')}), starting the server.")
-        ServerService.start(context)
     }
 }
 

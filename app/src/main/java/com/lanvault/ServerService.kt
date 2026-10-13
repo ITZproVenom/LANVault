@@ -14,6 +14,8 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.lanvault.net.EventLog
+import com.lanvault.monitor.AdGuardHomeRuntime
+import com.lanvault.SmbServerRuntime
 import com.lanvault.web.NetworkAddresses
 
 /** Keeps the LAN storage server alive while the TV is on. */
@@ -38,18 +40,47 @@ class ServerService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         val action = intent?.action
         when (action) {
+            ACTION_ADGUARD_HOME_ONLY -> {
+                AppRuntime.stopServer()
+                Thread({
+                    runCatching { AdGuardHomeRuntime.get(this).startIfEnabled() }
+                }, "lanvault-adguardhome-autostart").start()
+            }
             ACTION_STOP -> {
                 AppRuntime.settingsStore.update { it.copy(autoStartOnBoot = false) }
+                AppRuntime.stopServer()
+                val homeStatus = AdGuardHomeRuntime.get(this).status()
+                if (homeStatus.optBoolean("running") || homeStatus.optBoolean("autoStart")) {
+                    // Stop file sharing without killing the AdGuard Home DNS server.
+                    startForegroundCompat(buildNotification())
+                    return START_STICKY
+                }
                 stopSelf()
                 return START_NOT_STICKY
             }
-            else -> AppRuntime.startServer(this)
+            else -> {
+                val shouldStartServer = !(intent == null && !AppRuntime.settingsStore.current().autoStartOnBoot)
+                if (shouldStartServer) {
+                    AppRuntime.startServer(this)
+                } else {
+                    // START_STICKY may redeliver a null intent after file sharing was stopped.
+                    AppRuntime.stopServer()
+                    if (!AdGuardHomeRuntime.get(this).status().optBoolean("autoStart")) {
+                        stopSelf()
+                        return START_NOT_STICKY
+                    }
+                }
+                Thread({
+                    runCatching { AdGuardHomeRuntime.get(this).startIfEnabled() }
+                }, "lanvault-adguardhome-autostart").start()
+            }
         }
         startForegroundCompat(buildNotification())
         return START_STICKY
     }
 
     override fun onDestroy() {
+        runCatching { AdGuardHomeRuntime.get(this).stop() }
         AppRuntime.stopServer()
         wakeLock?.let { lock -> if (lock.isHeld) runCatching { lock.release() } }
         wakeLock = null
@@ -62,6 +93,10 @@ class ServerService : LifecycleService() {
         val port = AppRuntime.server?.port ?: settings.serverPort
         val addresses = NetworkAddresses.ipv4()
         val host = addresses.firstOrNull() ?: "this-tv"
+        val sharing = AppRuntime.server?.isRunning == true
+        val smb = SmbServerRuntime.get(this).status()
+        val smbPort = smb.optInt("port", 0)
+        val smbAddress = addresses.firstOrNull()?.let { if (smbPort > 0) SmbServerRuntime.addr(it, smbPort) else "" }.orEmpty()
         val openIntent = Intent(this, MainActivity::class.java)
         val pendingOpen = PendingIntent.getActivity(
             this,
@@ -76,20 +111,33 @@ class ServerService : LifecycleService() {
             stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val content = if (sharing) {
+            "Web " + port + " · " + (smbAddress.ifBlank { "SMB starting" })
+        } else {
+            "File sharing stopped; AdGuard Home may remain active."
+        }
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_server)
-            .setContentTitle("LANVault is sharing storage")
-            .setContentText("http://$host:${port}/ui/ · WebDAV on port ${port}")
+            .setContentTitle(if (sharing) "LANVault is sharing storage" else "LANVault network services")
+            .setContentText(content)
             .setStyle(
                 NotificationCompat.BigTextStyle()
                     .bigText(
                         buildString {
-                            append("Web interface: ")
-                            append(addresses.joinToString("  ") { "http://$it:${port}/ui/" }.ifEmpty { host })
-                            append("\niPhone Files > Connect to Server: ")
-                            append(addresses.joinToString("  ") { "http://$it:${port}/" }.ifEmpty { host })
-                            append("\nUse the address on the same network as your device. " +
-                                "All settings are in the web interface.")
+                            if (sharing) {
+                                append("Web interface: ")
+                                append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/ui/" }.ifEmpty { host })
+                                append("\niPhone Files SMB server: ")
+                                append(if (smbAddress.isBlank()) smb.optString("message", "Starting SMB server…") else smbAddress)
+                                append("\nWebDAV URL (WebDAV-compatible clients): ")
+                                append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/" }.ifEmpty { host })
+                                append("\nOpen the /ui/ address in Safari to browse and stream files. ")
+                                append("Enter the SMB address above in Files → Browse → … → Connect to Server. ")
+                                append("All settings and monitoring are controlled from the web interface.")
+                            } else {
+                                append("File sharing is stopped. The bundled AdGuard Home DNS service can remain active; ")
+                                append("manage it from Network Monitor in the web interface.")
+                            }
                         },
                     ),
             )
@@ -128,9 +176,18 @@ class ServerService : LifecycleService() {
         const val CHANNEL_ID = "lanvault_server"
         const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.lanvault.action.STOP"
+        const val ACTION_ADGUARD_HOME_ONLY = "com.lanvault.action.ADG_HOME_ONLY"
 
         fun start(context: Context) {
             val intent = Intent(context, ServerService::class.java)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+                else context.startService(intent)
+            }
+        }
+
+        fun startAdGuardHomeOnly(context: Context) {
+            val intent = Intent(context, ServerService::class.java).setAction(ACTION_ADGUARD_HOME_ONLY)
             runCatching {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
                 else context.startService(intent)

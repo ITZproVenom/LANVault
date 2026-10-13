@@ -16,6 +16,8 @@ import com.lanvault.storage.SafePath
 import com.lanvault.storage.StorageRepository
 import com.lanvault.storage.VaultFileSystem
 import com.lanvault.storage.VolumeKind
+import com.lanvault.SmbServerRuntime
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /**
@@ -27,6 +29,8 @@ class VaultServer(
     private val settingsStore: SettingsStore,
     private val storageRepository: StorageRepository,
 ) {
+
+    internal val monitoringContext: Context get() = context.applicationContext
 
     private val fileSystem = VaultFileSystem(storageRepository, settingsStore)
     private val webDavHandler = WebDavHandler(fileSystem, settingsStore)
@@ -67,6 +71,7 @@ class VaultServer(
                 server = listener
                 lastError = null
                 reportStarted(listener.port, preferred)
+                syncSmb()
                 return
             } catch (error: Throwable) {
                 runCatching { listener.close() }
@@ -115,7 +120,7 @@ class VaultServer(
         }
         val settings = settingsStore.current()
         if (!settings.shareWebdav) {
-            EventLog.shared.warn("WebDAV sharing is switched off - iPhone Files cannot connect.")
+            EventLog.shared.warn("WebDAV is switched off; SMB can still serve native iPhone Files.")
         }
         if (!storageRepository.hasAllFilesAccess()) {
             EventLog.shared.warn("Full storage access is not granted - some drives may be hidden.")
@@ -131,9 +136,20 @@ class VaultServer(
     }
 
     fun stop() {
+        SmbServerRuntime.get(context).stop()
         server?.close()
         server = null
         EventLog.shared.info("Server stopped.")
+    }
+
+    fun smbStatus(): JSONObject = SmbServerRuntime.get(context).status()
+
+    fun syncSmb() {
+        val settings = settingsStore.current()
+        val result = SmbServerRuntime.get(context).sync(settings, storageRepository)
+        if (settings.shareSmb && !result.optBoolean("running") && !result.optBoolean("starting")) {
+            EventLog.shared.warn(result.optString("message", "SMB server is not running."))
+        }
     }
 
     fun restart() {
@@ -173,6 +189,23 @@ class VaultServer(
 
     private fun route(request: HttpRequest): HttpResponse {
         val settings = settingsStore.current()
+
+        if (request.path.startsWith("/api/monitoring")) {
+            if (!settings.requireAuth || settings.username.isBlank() || settings.password.isBlank() || (settings.username == "lanvault" && settings.password == "lanvault")) {
+                return HttpResponse.status(403, "Forbidden").apply {
+                    header("Content-Type", "text/plain; charset=utf-8")
+                    bodyBytes = "Set a unique username and password in LANVault Settings before using network-monitoring integrations; default credentials are not accepted.".toByteArray(Charsets.UTF_8)
+                }
+            }
+            if (!authorized(request, settings)) {
+                return HttpResponse.status(401, "Unauthorized").apply {
+                    header("WWW-Authenticate", "Basic realm=\"LANVault monitoring\"")
+                    header("Content-Type", "text/plain; charset=utf-8")
+                    header("Content-Length", "0")
+                }
+            }
+            return apiHandler.handle(request)
+        }
 
         if (request.path.startsWith("/api/") || request.path == "/api") {
             if (settings.requireAuth && !authorized(request, settings)) {

@@ -1,7 +1,7 @@
 # LANVault
 
-Turn an Android TV into a storage server for your whole home network. Plug in a USB drive, point
-a browser or the iPhone Files app at it, and your media is streamable from the TV wherever it
+Turn an Android TV into a storage server for your home network. Plug in a USB drive, open the
+browser interface from an iPhone or computer, and stream media directly from the TV wherever it
 lives.
 
 Nothing is uploaded anywhere. Everything stays on your LAN.
@@ -10,13 +10,13 @@ Nothing is uploaded anywhere. Everything stays on your LAN.
 
 - **The TV's own storage** and every **USB / SD drive** plugged into it, browsable as one file tree.
 - **A web interface** on your LAN — browse, stream and transfer files from any browser.
-- **The iPhone Files app** through *Connect to Server* — native WebDAV support, no third-party app
-  needed. Upload, download, move, rename, delete, same as any other file location.
+- **The iPhone Files app** through *Connect to Server* using the bundled SMB2/3 server.
+  HTTP WebDAV remains available separately for WebDAV-compatible clients.
 - **Direct streaming** — video and audio play straight from the source through HTTP range
   requests, so playback starts before the file has finished arriving.
-- **Two-way transfers** — phone to TV and TV to phone, both from the browser and from Files.
-- **Display-only TV screen** — no menus to get lost in. It shows the server status, the live log,
-  the web interface link and the exact Connect to Server link to type.
+- **Two-way transfers** — phone to TV and TV to phone from the browser or a WebDAV-capable client.
+- **Display-only TV screen** — no menus to get lost in. It shows server status, live logs and the
+  web-interface link.
 - **Everything is configured from the browser.** The TV never asks you to touch a setting.
 
 ## Install
@@ -51,20 +51,21 @@ http://<tv-ip-address>:<port>/ui/
 
 `<port>` is **8080** unless something on the TV already held that port (see below).
 
-### From the iPhone Files app
+### From an iPhone
 
-The exact address is printed on the TV screen and in the web interface:
+Open the web interface in Safari:
 
-1. Files app → **Browse** → **…** (top right) → **Connect to Server**
-2. Enter `http://<tv-ip-address>:<port>/` — no path after the port.
-3. Tap **Connect**, then pick the branch that matches your settings:
-   - **Access is open (the default)** — choose **Guest**. No username, no password.
-   - **"Require a username and password" is turned on** — choose **Registered User**, then enter
-     the username (default `lanvault`) and the password you set.
-4. The share appears under **Shared** in the sidebar.
+```
+http://<tv-ip-address>:<port>/ui/
+```
 
-The TV screen always names the branch you should take, and the username to use when a password is
-required, so you never have to guess which one applies.
+Use the **Files** view in Safari for browsing, previews, streaming and transfers. To mount TV storage
+inside the native iPhone Files app, use **Browse → … → Connect to Server** and enter the `smb://`
+address displayed by LANVault. Choose Guest when authentication is disabled, or Registered User with
+the LANVault credentials when authentication is enabled.
+
+**Do not enter the HTTP WebDAV URL in Connect to Server.** WebDAV remains enabled separately for
+compatible clients; native iPhone Files uses SMB2/3.
 
 ### If a video will not preview
 
@@ -83,9 +84,9 @@ restart picks it up again.
 
 The web interface shows a **Keep port N** button that pins the fallback port permanently.
 
-> **Protocol:** the iPhone Files app connects to file servers over SMB or WebDAV. LANVault speaks
-> **WebDAV** (RFC 4918) at the server root, which needs no native libraries and keeps the whole
-> server inside the app. AFP is no longer supported by iOS.
+> **Protocols:** LANVault supports SMB2/3 for native iPhone Files → Connect to Server and HTTP
+> WebDAV (RFC 4918) for WebDAV-compatible clients. They are separate endpoints and can be enabled
+> or disabled independently.
 
 ### From Android, Windows, macOS, Linux
 
@@ -98,14 +99,53 @@ Everything below is editable at `/ui/` → **Settings** while the server is runn
 
 | Setting | What it does |
 | --- | --- |
-| WebDAV & web port | Port for both the web interface and iPhone Files. Needs a restart to apply. If it is busy the server falls forward to the next free port and says so. |
-| Server name | Name shown to iPhone Files as the share name. |
+| WebDAV & web port | Port for the web interface and WebDAV-compatible clients. Needs a restart to apply. If it is busy, the server falls forward to the next free port and says so. |
+| Server name | Name shown to WebDAV-compatible clients. |
 | Require username and password | Applies a single set of HTTP Basic credentials to the web interface and WebDAV. |
 | Allow uploads / deletions / new folders | Client write permissions. |
 | Show hidden files | Includes names starting with a dot. |
 | Start after boot | Keeps the server running when the TV powers on. |
 | Keep CPU awake | Stops the screen dimming from interrupting a transfer. |
-| Serve WebDAV | Turns the WebDAV share off, leaving only the web interface. |
+| Serve WebDAV | Turns the WebDAV endpoint off without disabling SMB file sharing. |
+| Enable native iPhone Files server (SMB2/3) | Exports directly mounted TV/USB volumes using SMB. Tries port 445 and falls back to 1445 when unavailable. |
+
+## Built-in AdGuard Home service
+
+The Network Monitor page now includes an actual AdGuard Home service, not just a connector. CI builds upstream AdGuard Home `v0.107.79` for Android ARMv7 and ARM64, includes both Android executables and the GPL-3.0 license in the APK, and the app selects the matching binary for the device. The binaries are built for `GOOS=android`; this avoids relying on the wrong-architecture Linux `386` binary.
+
+Start or stop the built-in service from **Network Monitor → AdGuard Home on this TV**. On first
+start, LANVault creates an authenticated configuration and a generated admin password; reveal it
+using **Show generated admin login** and open the dashboard link on port 3000. Sign in as
+`admin`, then change the password. Use AdGuard Home's web UI to configure upstream DNS, blocklists,
+clients, and query logging. The optional “Connect to another AdGuard Home” fields are for a
+separate instance, not the bundled server.
+
+This unprivileged Android build configures DNS on port 53535 so AdGuard Home can start without root.
+Its dashboard and filtering controls can run, but most routers require DNS on port 53 and cannot
+specify a custom port. **Do not point the router's DNS at this TV yet.** Router-wide DNS filtering
+requires a supported privileged port-53 configuration or router-side forwarding; this has not
+been verified on every Android TV.
+
+The bundled upstream component is AdGuard Home v0.107.79 under GPL-3.0. Its corresponding source is available at https://github.com/AdguardTeam/AdGuardHome/tree/v0.107.79 and the upstream license is included in the APK assets.
+
+## Network monitoring
+
+The **Network monitor** tab is read-only and does not replace Every Proxy or AdGuard VPN.
+
+- **TV metrics:** Android VPN transport when reported, memory, exposed thermal sensors, uptime, network-interface byte counters, and the kernel ARP neighbour table when readable.
+- **Every Proxy:** optionally probe its local TCP listening port. This checks whether a listener accepts a connection; it does not validate proxy auth or change Every Proxy settings.
+- **Bundled AdGuard Home:** start and manage the actual Android ARM/ARM64 service on this TV.
+  The optional remote connector is a separate integration for another running instance. DNS query
+  counts are not total internet bandwidth.
+- **AdGuard DNS account:** sign in to the official API and sync existing DNS profiles, devices, and available last-24-hour query statistics. The account password is not stored; session tokens and AdGuard Home credentials are encrypted using Android Keystore. This integration is read-only.
+- **Per-device bandwidth:** requires router traffic counters, SNMP, flow export or a compatible router API. The monitor does not infer per-device byte counts from DNS queries.
+
+### Monitoring security
+
+The `/api/monitoring/*` API requires LANVault username/password protection. Enable it in **Settings** before adding credentials. LANVault's current browser interface uses HTTP, not HTTPS: use sign-in/configuration only on a trusted LAN because browser-to-TV requests are not encrypted in transit. Cloud access tokens and local AdGuard Home credentials are encrypted at rest with an Android Keystore key.
+
+The bundled AdGuard Home service is included in the APK. The remote connector remains optional
+and is only for a separate instance. LANVault does not change your router's DNS settings.
 
 ## How it is put together
 
@@ -118,7 +158,7 @@ app/src/main/java/com/lanvault/
 ├── TreePickerActivity.kt  grants a persistent SAF tree for drives the TV hides
 ├── net/LiteHttpServer.kt  HTTP/1.1: keep-alive, chunked bodies, ranged writes
 ├── storage/               volume discovery, direct filesystem and SAF access
-├── web/WebDavHandler.kt   the RFC 4918 endpoint iPhone Files talks to
+├── web/WebDavHandler.kt   the RFC 4918 WebDAV endpoint for compatible clients
 ├── web/ApiHandler.kt      JSON API behind the web interface
 └── web/MimeTypes.kt       extension to MIME type, video/audio/image detection
 ```

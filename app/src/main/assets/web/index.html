@@ -1,62 +1,58 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>LANVault — storage server</title>
-  <link rel="stylesheet" href="/ui/style.css" />
-  <link rel="icon" href="data:," />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d16">
+  <meta name="color-scheme" content="dark">
+  <title>LANVault · Private storage</title>
+  <link rel="stylesheet" href="/ui/style.css">
+  <link rel="icon" href="data:,">
 </head>
 <body>
-  <div class="app">
+  <a class="skip-link" href="#view">Skip to content</a>
+  <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><span class="dot" id="statusDot"></span><span>LAN<span style="color:var(--accent)">Vault</span></span></div>
-
-      <nav class="nav">
-        <a href="#/browse" data-nav="browse">Files</a>
-        <a href="#/uploads" data-nav="uploads">Transfer</a>
-        <a href="#/settings" data-nav="settings">Settings</a>
-        <a href="#/logs" data-nav="logs">Logs</a>
+      <a class="brand" href="#/browse" aria-label="LANVault home">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 44 44"><defs><linearGradient id="vaultGradient" x1="2" y1="1" x2="42" y2="43"><stop stop-color="#c4beff"/><stop offset="1" stop-color="#66e4c2"/></linearGradient></defs><rect x="1" y="1" width="42" height="42" rx="14" fill="url(#vaultGradient)"/><path d="M12 14h20M12 21.5h20M12 29h12" fill="none" stroke="#111323" stroke-width="3" stroke-linecap="round"/></svg></span>
+        <span class="brand-name">LAN<span>Vault</span></span>
+      </a>
+      <div class="brand-caption">YOUR PRIVATE STORAGE</div>
+      <div class="server-indicator"><span class="status-dot" id="statusDot"></span><div><strong>TV storage server</strong><span id="sidebarFooter">Connecting…</span></div></div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="#/browse" data-nav="browse" class="active"><svg viewBox="0 0 24 24"><path d="M3 7.5h7l2 2h9v8.8a1.7 1.7 0 0 1-1.7 1.7H4.7A1.7 1.7 0 0 1 3 18.3Z"/><path d="M3 7.5V5.8A1.8 1.8 0 0 1 4.8 4h4.8l2 2"/></svg><span>Files</span><i>01</i></a>
+        <a href="#/uploads" data-nav="uploads"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 15v3.2A1.8 1.8 0 0 0 5.8 20h12.4a1.8 1.8 0 0 0 1.8-1.8V15"/></svg><span>Transfers</span><i>02</i></a>
+        <a href="#/monitoring" data-nav="monitoring"><svg viewBox="0 0 24 24"><path d="M3 12h3.5l2.2-6 4.1 12 2.4-6H21"/><path d="M5 4.5A9 9 0 1 1 3 15"/></svg><span>Network monitor</span><i>03</i></a>
+        <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="m19 13.6 1.5 1.2-1.8 3.2-1.8-.6a7.6 7.6 0 0 1-1.8.8l-.6 1.8h-3.7l-.6-1.8a7.6 7.6 0 0 1-1.8-.8l-1.8.6-1.8-3.2 1.5-1.2a7.2 7.2 0 0 1 0-2.1l-1.5-1.2 1.8-3.2 1.8.6a7.6 7.6 0 0 1 1.8-.8l.6-1.8h3.7l.6 1.8a7.6 7.6 0 0 1 1.8.8l1.8-.6 1.8 3.2-1.5 1.2a7.2 7.2 0 0 1 0 2.1Z"/></svg><span>Settings</span><i>04</i></a>
+        <a href="#/logs" data-nav="logs"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.4"/><path d="M8 9h8M8 12.5h8M8 16h4"/></svg><span>Activity logs</span><i>05</i></a>
       </nav>
-
-      <div>
-        <div class="volumes-title">Drives</div>
-        <div class="volume-list" id="volumeList"></div>
-      </div>
-
-      <div class="sidebar-footer" id="sidebarFooter">—</div>
+      <div class="drive-section"><div class="aside-section-head"><span>Connected drives</span><span>STORAGE</span></div><div class="volume-list" id="volumeList"><div class="volume-placeholder"><span></span><span>Discovering drives…</span></div></div></div>
+      <div class="privacy-note"><span class="privacy-symbol"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5.2c0 4.2-2.8 7.8-7 9.8-4.2-2-7-5.6-7-9.8V6Z"/><path d="m9 12 2 2 4-4"/></svg></span><div><strong>Private by design</strong><p>Your data stays on your local network.</p></div></div>
     </aside>
 
-    <main class="main">
-      <div class="topbar">
-        <div class="path-bar" id="pathBar"></div>
-        <div class="actions">
-          <button class="ghost small" id="viewToggle" title="Switch between grid and list">List view</button>
-          <button class="ghost small" id="newFolderButton">New folder</button>
-          <button class="ghost small" id="uploadButton">Upload</button>
+    <main class="main-content">
+      <header class="page-header">
+        <div class="page-intro"><div class="overline"><span></span> YOUR SPACE · YOUR NETWORK</div><h1 id="pageTitle">Your files, at home.</h1><p id="pageSubtitle">A simple front door to every drive connected to your TV.</p></div>
+        <div class="header-actions">
+          <div class="lan-pill"><span></span> LOCAL NETWORK</div>
+          <button class="button button-subtle small" id="viewToggle" title="Switch between grid and list">&#9776; <span>List view</span></button>
+          <button class="button button-subtle small" id="newFolderButton">＋ <span>New folder</span></button>
+          <button class="button button-accent small" id="uploadButton"><span class="upload-arrow">↑</span> Upload</button>
         </div>
-      </div>
-
-      <div class="notice" id="notice">
-        <div id="noticeText"></div>
-        <button class="primary small" id="noticeAction">Fix it</button>
-      </div>
-
-      <div class="dropzone" id="dropzone">Drop files here to copy them into this folder</div>
-
-      <section id="view"></section>
-
-      <div id="uploadProgress" class="progress" style="display:none"><div></div></div>
+      </header>
+      <div class="location-bar"><div class="path-bar" id="pathBar" aria-label="Current location"></div><div class="direct-mark"><span>◆</span> DIRECT · NO CLOUD</div></div>
+      <div class="notice" id="notice" role="status"><span class="notice-icon">!</span><div class="notice-body"><strong>Action needed</strong><div id="noticeText"></div></div><button class="button button-subtle small" id="noticeAction">Fix it</button></div>
+      <div class="section-intro"><div><span class="section-label">YOUR LIBRARY</span><h2 id="contentTitle">Everything, together.</h2><p id="contentSubtitle">Browse, preview, and stream directly from the source.</p></div></div>
+      <div class="dropzone" id="dropzone"><span class="dropzone-icon"><svg viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 15v3.2A1.8 1.8 0 0 0 5.8 20h12.4a1.8 1.8 0 0 0 1.8-1.8V15"/></svg></span><span class="dropzone-copy"><strong>Drop files to transfer</strong><span>or tap to choose files from this device</span></span><span class="dropzone-action">UPLOAD <b>↗</b></span></div>
+      <section id="view" aria-live="polite"></section>
+      <div id="uploadProgress" class="progress" style="display:none" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100"><div></div></div>
+      <footer class="page-footer"><span><i></i> Connected locally</span><span>Media streams from the TV. Nothing is sent to the cloud.</span></footer>
     </main>
   </div>
 
-  <div class="overlay" id="overlay">
-    <div class="sheet" id="overlaySheet"></div>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
-  <input type="file" id="filePicker" multiple hidden />
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-label="File preview and actions"><div class="dialog-sheet" id="overlaySheet"></div></div>
+  <div class="toast" id="toast" role="status"></div>
+  <input type="file" id="filePicker" multiple hidden>
   <script src="/ui/app.js"></script>
 </body>
 </html>

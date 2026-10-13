@@ -22,6 +22,7 @@ data class Settings(
     val autoStartOnBoot: Boolean = true,
     val keepCpuAwake: Boolean = true,
     val shareWebdav: Boolean = true,
+    val shareSmb: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_PORT = 8080
@@ -69,6 +70,7 @@ class SettingsStore(context: Context) {
             autoStartOnBoot = preferences.getBoolean("auto_start_on_boot", defaults.autoStartOnBoot),
             keepCpuAwake = preferences.getBoolean("keep_cpu_awake", defaults.keepCpuAwake),
             shareWebdav = preferences.getBoolean("share_webdav", defaults.shareWebdav),
+            shareSmb = preferences.getBoolean("share_smb", defaults.shareSmb),
         )
     }
 
@@ -86,6 +88,7 @@ class SettingsStore(context: Context) {
             .putBoolean("auto_start_on_boot", value.autoStartOnBoot)
             .putBoolean("keep_cpu_awake", value.keepCpuAwake)
             .putBoolean("share_webdav", value.shareWebdav)
+            .putBoolean("share_smb", value.shareSmb)
             .apply()
     }
 }

@@ -130,6 +130,34 @@ class ApiServerTest {
     }
 
     @Test
+    fun `monitoring api is protected when LANVault auth is disabled`() {
+        val denied = request("GET", "/api/monitoring/status")
+        assertEquals(403, denied.code)
+
+        settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "lanvault") }
+        assertEquals(403, request("GET", "/api/monitoring/status", credentials = "lanvault" to "lanvault").code)
+
+        settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "secret") }
+        val allowed = json("GET", "/api/monitoring/status", credentials = "lanvault" to "secret")
+        assertEquals(200, allowed.code)
+        assertTrue(allowed.body.contains("\"vpnActive\""))
+        assertTrue(allowed.body.contains("\"routerNeighbors\""))
+    }
+
+
+    @Test
+    fun bundledAdGuardHomeRuntimeIsExposedOnlyToAuthenticatedMonitors() {
+        assertEquals(403, request("GET", "/api/monitoring/embedded").code)
+
+        settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "secret") }
+        val response = json("GET", "/api/monitoring/embedded", credentials = "lanvault" to "secret")
+        assertEquals(200, response.code)
+        assertTrue(response.body.contains("\"embeddedHome\""))
+        assertTrue(response.body.contains("\"binaryBundled\""))
+        assertTrue(response.body.contains("\"adminPort\":3000"))
+    }
+
+    @Test
     fun `volumes lists drives with capacity`() {
         val response = json("GET", "/api/volumes")
         assertEquals(200, response.code)

@@ -19,7 +19,8 @@ private const val COPY_BUFFER_SIZE = 128 * 1024
 
 /**
  * RFC 4918 WebDAV endpoint, plus HTTP range serving so media plays straight from the TV.
- * This is what the iPhone Files app "Connect to Server" talks to.
+ * Use a WebDAV-compatible client; the native iOS Files "Connect to Server" flow rejects this
+ * plain HTTP URL. LANVault deliberately does not implement SMB.
  */
 class WebDavHandler(
     private val fileSystem: VaultFileSystem,
