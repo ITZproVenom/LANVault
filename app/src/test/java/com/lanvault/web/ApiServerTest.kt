@@ -146,7 +146,7 @@ class ApiServerTest {
 
 
     @Test
-    fun \`bundled AdGuard Home runtime is exposed only to authenticated monitors\`() {
+    fun bundledAdGuardHomeRuntimeIsExposedOnlyToAuthenticatedMonitors() {
         assertEquals(403, request("GET", "/api/monitoring/embedded").code)
 
         settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "secret") }

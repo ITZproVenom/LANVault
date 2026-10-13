@@ -43,7 +43,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/app/src/main/assets/adguardhome"
           cp LICENSE.txt "$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/LICENSE.txt"
           printf '%s\n' 'AdGuard Home v0.107.79' 'Source: https://github.com/AdguardTeam/AdGuardHome/tree/v0.107.79' 'Built for Android by LANVault CI; see upstream GPL-3.0 license.' > "$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/SOURCE.txt"
-          GOOS=android GOARCH=arm GOARM=7 CHANNEL=release VERSION=v0.107.79 OUT="$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/AdGuardHome-android-arm" make go-build
+          GOOS=android GOARCH=arm GOARM=5 CHANNEL=release VERSION=v0.107.79 OUT="$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/AdGuardHome-android-arm" make go-build
           GOOS=android GOARCH=arm64 CHANNEL=release VERSION=v0.107.79 OUT="$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/AdGuardHome-android-arm64" make go-build
           file "$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/AdGuardHome-android-arm"
           file "$GITHUB_WORKSPACE/app/src/main/assets/adguardhome/AdGuardHome-android-arm64"
