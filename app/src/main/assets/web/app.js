@@ -58,6 +58,9 @@
     refresh();
     setInterval(refresh, 6000);
     route();
+    window.setInterval(function () {
+      if (state.route === 'monitoring') refreshMonitoringData();
+    }, 15000);
   });
 
   function api(path, options) {
@@ -154,7 +157,7 @@
     document.querySelectorAll('[data-nav]').forEach(function (link) {
       link.classList.toggle('active', link.getAttribute('data-nav') === name);
     });
-    state.route = name === 'settings' || name === 'logs' || name === 'uploads' ? name : 'browse';
+    state.route = name === 'settings' || name === 'logs' || name === 'uploads' || name === 'monitoring' ? name : 'browse';
     if (state.route === 'browse') {
       state.path = decodeURIComponent(parts.slice(1).join('/') || '');
       els.pathBar.style.display = '';
@@ -162,6 +165,11 @@
     } else {
       els.pathBar.style.display = 'none';
     }
+    var browsing = state.route === 'browse';
+    els.viewToggle.style.display = browsing ? '' : 'none';
+    els.newFolderButton.style.display = browsing ? '' : 'none';
+    els.uploadButton.style.display = browsing ? '' : 'none';
+    els.dropzone.style.display = browsing ? '' : 'none';
     render();
   }
 
@@ -169,6 +177,7 @@
     if (state.route === 'settings') renderSettings();
     else if (state.route === 'logs') renderLogs();
     else if (state.route === 'uploads') renderTransfers();
+    else if (state.route === 'monitoring') renderMonitoring();
     else renderEntries();
   }
 
@@ -833,6 +842,259 @@
   function checkboxValue(id) {
     var node = document.getElementById(id);
     return node && node.checked ? 'true' : 'false';
+  }
+
+
+  /* --------------------------------------------------------- network monitoring */
+  function renderMonitoring() {
+    els.view.innerHTML =
+      '<div class="monitor-page">' +
+        '<div class="monitor-hero"><div><p class="eyebrow">LANVAULT / NETWORK</p><h2>Network monitor</h2>' +
+        '<p class="hint">Read-only monitoring for this TV, AdGuard Home, and your AdGuard DNS cloud account.</p></div>' +
+        '<button class="primary" id="monitorRefresh">Refresh now</button></div>' +
+        '<div class="monitor-alert" id="monitorAuthWarning">Monitoring integrations contain private network and account data. Enable username/password protection in LANVault Settings first. AdGuard sign-in is sent to this TV over local HTTP, so use this only on a trusted LAN.</div>' +
+        '<section class="monitor-section"><h3>TV gateway health</h3><div class="monitor-cards" id="monitorLocalCards"><div class="monitor-card"><span>Loading</span><strong>…</strong></div></div>' +
+        '<details class="monitor-details"><summary>Interfaces and observed router neighbours</summary><pre class="monitor-json" id="monitorLocalDetails">Loading…</pre></details>' +
+        '<div class="monitor-proxy-form"><label for="monitorProxyPort">Every Proxy listening port <span>0 disables the check</span></label><div class="monitor-form-row"><input type="number" id="monitorProxyPort" min="0" max="65535" placeholder="e.g. 8080" /><button id="monitorProxySave">Save port</button></div><p class="hint" id="monitorProxyMessage">Checks whether a TCP listener responds on 127.0.0.1. It does not change Every Proxy.</p></div></section>' +
+        '<section class="monitor-section"><div class="monitor-heading"><div><h3>AdGuard Home</h3><p class="hint">Connect to a running AdGuard Home instance for local DNS, clients, query logs and blocking stats.</p></div><span class="monitor-badge" id="monitorHomeBadge">Not configured</span></div>' +
+        '<div class="monitor-form-grid"><div class="field"><div><label for="monitorHomeUrl">AdGuard Home base URL</label><div class="desc">Example: http://192.168.1.20:3000. Use the origin only, not /control.</div></div><input type="text" id="monitorHomeUrl" placeholder="http://192.168.1.20:3000" autocomplete="url" /></div>' +
+        '<div class="field"><div><label for="monitorHomeUser">Admin username</label></div><input type="text" id="monitorHomeUser" autocomplete="username" /></div>' +
+        '<div class="field"><div><label for="monitorHomePassword">Admin password</label><div class="desc">Encrypted on the TV using Android Keystore.</div></div><input type="password" id="monitorHomePassword" autocomplete="current-password" /></div></div>' +
+        '<div class="monitor-actions"><button class="primary" id="monitorHomeSave">Save &amp; test connection</button><button class="ghost" id="monitorHomeForget">Disconnect</button></div><p id="monitorHomeMessage" class="hint">Not connected.</p>' +
+        '<div class="monitor-cards" id="monitorHomeCards"></div><div class="monitor-two-col"><div><h4>Known clients</h4><pre class="monitor-json" id="monitorHomeClients">—</pre></div><div><h4>Recent DNS queries</h4><pre class="monitor-json" id="monitorHomeQueries">—</pre></div></div>' +
+        '<details class="monitor-details"><summary>Raw AdGuard Home response</summary><pre class="monitor-json" id="monitorHomeRaw">—</pre></details></section>' +
+        '<section class="monitor-section"><div class="monitor-heading"><div><h3>AdGuard DNS account</h3><p class="hint">Sign in to sync your existing cloud DNS profiles, registered devices, and available query statistics.</p></div><span class="monitor-badge" id="monitorCloudBadge">Signed out</span></div>' +
+        '<div id="monitorCloudSignIn"><div class="monitor-form-grid"><div class="field"><div><label for="monitorCloudEmail">AdGuard account email</label></div><input type="email" id="monitorCloudEmail" autocomplete="username" /></div>' +
+        '<div class="field"><div><label for="monitorCloudPassword">Password</label></div><input type="password" id="monitorCloudPassword" autocomplete="current-password" /></div>' +
+        '<div class="field"><div><label for="monitorCloudMfa">Two-factor code (optional)</label><div class="desc">Only needed when 2FA is enabled.</div></div><input type="text" id="monitorCloudMfa" inputmode="numeric" autocomplete="one-time-code" /></div></div>' +
+        '<div class="monitor-actions"><button class="primary" id="monitorCloudSignInButton">Sign in with AdGuard</button></div></div>' +
+        '<div id="monitorCloudConnected" style="display:none"><p class="hint" id="monitorCloudMessage"></p><div class="monitor-actions"><button class="primary" id="monitorCloudSync">Sync account now</button><button class="ghost" id="monitorCloudSignOut">Sign out</button></div></div>' +
+        '<div class="monitor-cards" id="monitorCloudCards"></div><div class="monitor-two-col"><div><h4>Existing DNS server profiles</h4><pre class="monitor-json" id="monitorCloudServers">—</pre></div><div><h4>Registered devices</h4><pre class="monitor-json" id="monitorCloudDevices">—</pre></div></div>' +
+        '<div class="monitor-two-col"><div><h4>Queries by device · last 24 hours</h4><pre class="monitor-json" id="monitorCloudDeviceStats">—</pre></div><div><h4>Top domains · last 24 hours</h4><pre class="monitor-json" id="monitorCloudDomainStats">—</pre></div></div>' +
+        '<details class="monitor-details"><summary>Time-series stats · last 24 hours</summary><pre class="monitor-json" id="monitorCloudTimeStats">—</pre></details></section>' +
+        '<section class="monitor-section"><h3>Bandwidth versus DNS activity</h3><p class="hint">AdGuard Home and AdGuard DNS show DNS queries and blocked requests, not total upload/download bytes per router device. This page reports the TV board\'s interface counters when Android exposes them and its ARP neighbour cache when readable. True per-device bandwidth requires router traffic counters/API or flow telemetry; no bandwidth totals are guessed.</p></section>' +
+      '</div>';
+
+    document.getElementById('monitorRefresh').addEventListener('click', refreshMonitoringData);
+    document.getElementById('monitorHomeSave').addEventListener('click', saveHomeMonitor);
+    document.getElementById('monitorHomeForget').addEventListener('click', forgetHomeMonitor);
+    document.getElementById('monitorCloudSignInButton').addEventListener('click', signInCloudMonitor);
+    document.getElementById('monitorCloudSync').addEventListener('click', refreshCloudMonitor);
+    document.getElementById('monitorCloudSignOut').addEventListener('click', signOutCloudMonitor);
+    document.getElementById('monitorProxySave').addEventListener('click', saveProxyMonitor);
+    refreshMonitoringData();
+  }
+
+  function monitorApi(path, method, value) {
+    var options = method ? { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value || {}) } : undefined;
+    return api(path, options);
+  }
+
+  function refreshMonitoringData() {
+    return monitorApi('/api/monitoring/status').then(function (data) {
+      var cards = [
+        ['Android VPN', data.vpnActive ? 'Active' : 'Not detected'],
+        ['Free system memory', data.systemMemoryAvailableMb == null ? 'Unavailable' : formatMonitorMb(data.systemMemoryAvailableMb) + ' MB'],
+        ['App heap', formatMonitorMb(data.appHeapUsedMb) + ' / ' + formatMonitorMb(data.appHeapMaxMb) + ' MB'],
+        ['Highest exposed thermal sensor', data.thermal && data.thermal.celsius != null ? data.thermal.celsius + ' °C' : 'Not exposed'],
+        ['Every Proxy', data.everyProxyPort > 0 ? (data.everyProxyListening ? 'Listener detected' : 'Port not reachable') : 'Not configured']
+      ];
+      document.getElementById('monitorLocalCards').innerHTML = cards.map(function (card) {
+        return '<div class="monitor-card"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(String(card[1])) + '</strong></div>';
+      }).join('');
+      document.getElementById('monitorLocalDetails').textContent = JSON.stringify({
+        activeTransports: data.activeTransports, uptimeSeconds: data.uptimeSeconds,
+        thermal: data.thermal, networkInterfaces: data.networkInterfaces, routerNeighbors: data.routerNeighbors
+      }, null, 2);
+      document.getElementById('monitorProxyPort').value = data.everyProxyPort || 0;
+      document.getElementById('monitorAuthWarning').style.display = 'none';
+      return monitorApi('/api/monitoring/home');
+    }).then(function (home) {
+      document.getElementById('monitorHomeBadge').textContent = !home.configured ? 'Not configured' : (home.connected ? 'Connected' : 'Connection issue');
+      setMonitorText('monitorHomeMessage', home.message || 'No status available.');
+      var stats = home.stats || {};
+      var cards = [
+        ['DNS queries', stats.num_dns_queries],
+        ['Blocked by filters', stats.num_blocked_filtering],
+        ['Blocked malware', stats.num_replaced_safebrowsing],
+        ['Avg. processing', stats.avg_processing_time == null ? null : Number(stats.avg_processing_time).toFixed(3) + ' s']
+      ];
+      document.getElementById('monitorHomeCards').innerHTML = cards.map(function (card) {
+        return '<div class="monitor-card"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(card[1] == null ? '—' : String(card[1])) + '</strong></div>';
+      }).join('');
+      setMonitorText('monitorHomeClients', JSON.stringify(home.clients, null, 2) || 'No client data.');
+      setMonitorText('monitorHomeQueries', JSON.stringify(home.queryLog, null, 2) || 'No query log.');
+      setMonitorText('monitorHomeRaw', JSON.stringify(home, null, 2));
+      if (home.baseUrl) document.getElementById('monitorHomeUrl').value = home.baseUrl;
+      return monitorApi('/api/monitoring/cloud');
+    }).then(function (cloud) {
+      renderCloudMonitor(cloud);
+    }).catch(function (error) {
+      var warning = document.getElementById('monitorAuthWarning');
+      if (warning) {
+        warning.style.display = '';
+        warning.textContent = error.message + ' Open Settings, enable username/password protection, and reload this page before connecting monitoring services.';
+      }
+      setMonitorText('monitorHomeMessage', error.message);
+      setMonitorText('monitorCloudMessage', error.message);
+    });
+  }
+
+  function renderCloudMonitor(cloud) {
+    var connected = !!cloud.connected;
+    document.getElementById('monitorCloudBadge').textContent = connected ? 'Connected' : 'Signed out';
+    document.getElementById('monitorCloudSignIn').style.display = connected ? 'none' : '';
+    document.getElementById('monitorCloudConnected').style.display = connected ? '' : 'none';
+    if (!connected) {
+      setMonitorText('monitorCloudMessage', cloud.message || 'Sign in to sync your DNS account.');
+      document.getElementById('monitorCloudCards').innerHTML = '';
+      ['monitorCloudServers','monitorCloudDevices','monitorCloudDeviceStats','monitorCloudDomainStats','monitorCloudTimeStats'].forEach(function (id) { setMonitorText(id, 'No synced data.'); });
+      return;
+    }
+    setMonitorText('monitorCloudMessage', (cloud.email || 'AdGuard account') + ' · ' + (cloud.message || 'Synced'));
+    document.getElementById('monitorCloudCards').innerHTML = [
+      ['DNS profiles', countCollection(cloud.dnsServers)],
+      ['Registered devices', countCollection(cloud.devices)],
+      ['Device query stats', countStats(cloud.deviceStats24h)],
+      ['Domain query stats', countStats(cloud.domainStats24h)]
+    ].map(function (card) {
+      return '<div class="monitor-card"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(String(card[1])) + '</strong></div>';
+    }).join('');
+    showCloudCollection('monitorCloudServers', cloud.dnsServers);
+    showCloudCollection('monitorCloudDevices', cloud.devices);
+    showCloudCollection('monitorCloudDeviceStats', cloud.deviceStats24h);
+    showCloudCollection('monitorCloudDomainStats', cloud.domainStats24h);
+    showCloudCollection('monitorCloudTimeStats', cloud.timeStats24h);
+  }
+
+  function showCloudCollection(id, result) {
+    var node = document.getElementById(id);
+    if (!node) return;
+    if (!result || !result.ok) {
+      node.textContent = result && result.error ? result.error : 'No synced data.';
+    } else {
+      node.textContent = JSON.stringify(result.data, null, 2);
+    }
+  }
+
+  function countCollection(result) {
+    if (!result || !result.ok || result.data == null) return 'Unavailable';
+    var data = result.data;
+    if (Array.isArray(data)) return data.length;
+    if (data.items && Array.isArray(data.items)) return data.items.length;
+    if (data.data && Array.isArray(data.data)) return data.data.length;
+    if (data.dns_servers && Array.isArray(data.dns_servers)) return data.dns_servers.length;
+    if (data.devices && Array.isArray(data.devices)) return data.devices.length;
+    return 'Synced';
+  }
+
+  function countStats(result) {
+    if (!result || !result.ok || result.data == null) return 'Unavailable';
+    var data = result.data;
+    var items = Array.isArray(data) ? data : (data.data || data.items || data.stats || []);
+    if (!Array.isArray(items)) return 'Synced';
+    return items.reduce(function (sum, item) {
+      var count = Number(item.queries != null ? item.queries : (item.query_count != null ? item.query_count : item.count));
+      return sum + (Number.isFinite(count) ? count : 0);
+    }, 0);
+  }
+
+  function saveHomeMonitor() {
+    var button = document.getElementById('monitorHomeSave');
+    var password = document.getElementById('monitorHomePassword');
+    button.disabled = true;
+    setMonitorText('monitorHomeMessage', 'Saving encrypted connection settings…');
+    monitorApi('/api/monitoring/home/config', 'POST', {
+      baseUrl: document.getElementById('monitorHomeUrl').value,
+      username: document.getElementById('monitorHomeUser').value,
+      password: password.value
+    }).then(function () {
+      toast('AdGuard Home settings saved');
+      return monitorApi('/api/monitoring/home');
+    }).then(function (home) {
+      document.getElementById('monitorHomeBadge').textContent = home.connected ? 'Connected' : 'Connection issue';
+      setMonitorText('monitorHomeMessage', home.message || 'Saved.');
+      setMonitorText('monitorHomeRaw', JSON.stringify(home, null, 2));
+      setMonitorText('monitorHomeClients', JSON.stringify(home.clients, null, 2));
+      setMonitorText('monitorHomeQueries', JSON.stringify(home.queryLog, null, 2));
+    }).catch(function (error) {
+      setMonitorText('monitorHomeMessage', error.message);
+    }).then(function () {
+      password.value = '';
+      button.disabled = false;
+    });
+  }
+
+  function forgetHomeMonitor() {
+    if (!window.confirm('Disconnect AdGuard Home and erase its saved credentials?')) return;
+    monitorApi('/api/monitoring/home/forget', 'POST', {}).then(function () {
+      setMonitorText('monitorHomeMessage', 'Connection removed.');
+      document.getElementById('monitorHomePassword').value = '';
+      refreshMonitoringData();
+    }).catch(toast);
+  }
+
+  function signInCloudMonitor() {
+    var button = document.getElementById('monitorCloudSignInButton');
+    var password = document.getElementById('monitorCloudPassword');
+    button.disabled = true;
+    setMonitorText('monitorCloudMessage', 'Signing in and syncing existing DNS profiles…');
+    monitorApi('/api/monitoring/cloud/login', 'POST', {
+      email: document.getElementById('monitorCloudEmail').value,
+      password: password.value,
+      mfaCode: document.getElementById('monitorCloudMfa').value
+    }).then(function (cloud) {
+      renderCloudMonitor(cloud);
+      toast('AdGuard DNS account synced');
+      password.value = '';
+      refreshMonitoringData();
+    }).catch(function (error) {
+      setMonitorText('monitorCloudMessage', error.message);
+      toast(error.message);
+    }).then(function () {
+      password.value = '';
+      button.disabled = false;
+    });
+  }
+
+  function refreshCloudMonitor() {
+    var button = document.getElementById('monitorCloudSync');
+    button.disabled = true;
+    monitorApi('/api/monitoring/cloud/refresh', 'POST', {}).then(function (cloud) {
+      renderCloudMonitor(cloud);
+      toast('AdGuard DNS data refreshed');
+    }).catch(toast).then(function () { button.disabled = false; });
+  }
+
+  function signOutCloudMonitor() {
+    if (!window.confirm('Sign out and erase the saved AdGuard DNS session tokens?')) return;
+    monitorApi('/api/monitoring/cloud/logout', 'POST', {}).then(function () {
+      toast('Signed out of AdGuard DNS');
+      refreshMonitoringData();
+    }).catch(toast);
+  }
+
+  function saveProxyMonitor() {
+    var button = document.getElementById('monitorProxySave');
+    button.disabled = true;
+    var port = parseInt(document.getElementById('monitorProxyPort').value || '0', 10);
+    monitorApi('/api/monitoring/proxy', 'POST', { port: port }).then(function (result) {
+      setMonitorText('monitorProxyMessage', result.listening ? 'TCP listener detected on 127.0.0.1:' + result.port + '.' :
+        (result.port === 0 ? 'Listener check disabled.' : 'No listener detected at 127.0.0.1:' + result.port + '. Check the Every Proxy port.'));
+      refreshMonitoringData();
+    }).catch(function (error) {
+      setMonitorText('monitorProxyMessage', error.message);
+    }).then(function () { button.disabled = false; });
+  }
+
+  function formatMonitorMb(value) {
+    var number = Number(value);
+    return Number.isFinite(number) ? (Math.round(number * 10) / 10).toString() : '—';
+  }
+
+  function setMonitorText(id, value) {
+    var node = document.getElementById(id);
+    if (node) node.textContent = value == null ? '' : String(value);
   }
 
   /* ---------------------------------------------------------------- logs */

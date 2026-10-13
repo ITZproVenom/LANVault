@@ -15,6 +15,8 @@ import com.lanvault.storage.VaultNode
 import com.lanvault.storage.VolumeDirectorySnapshot
 import com.lanvault.storage.VolumeKind
 import com.lanvault.storage.slug
+import com.lanvault.monitor.NetworkMonitoring
+import com.lanvault.monitor.MonitoringException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.Inet4Address
@@ -55,6 +57,7 @@ class ApiHandler(
 ) {
 
     private val fileSystem = VaultFileSystem(storageRepository, settingsStore)
+    private val networkMonitoring = NetworkMonitoring(server.monitoringContext)
 
     fun handle(request: HttpRequest): HttpResponse {
         val action = request.path.removePrefix("/api").trim('/')
@@ -76,6 +79,15 @@ class ApiHandler(
             "logs" -> logs(request)
             "restart" -> restart(request)
             "clear-cache" -> clearCache(request)
+            "monitoring/status" -> monitoringStatus()
+            "monitoring/home" -> monitoringHome()
+            "monitoring/home/config" -> configureMonitoringHome(request)
+            "monitoring/home/forget" -> forgetMonitoringHome()
+            "monitoring/cloud" -> monitoringCloud()
+            "monitoring/cloud/login" -> signInMonitoringCloud(request)
+            "monitoring/cloud/refresh" -> refreshMonitoringCloud()
+            "monitoring/cloud/logout" -> signOutMonitoringCloud()
+            "monitoring/proxy" -> configureEveryProxy(request)
             else -> json(HttpResponse.status(404, "Not Found"), JSONObject().put("error", "Unknown endpoint"))
         }
     }
@@ -539,6 +551,71 @@ class ApiHandler(
                 .put("message", line.message)
         }
         return json(HttpResponse.status(200, "OK"), JSONObject().put("lines", JSONArray(lines)))
+    }
+
+
+    private fun monitoringStatus(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.status())
+
+    private fun monitoringHome(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.homeSnapshot())
+
+    private fun configureMonitoringHome(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return try {
+            json(HttpResponse.status(200, "OK"), networkMonitoring.configureHome(
+                body.optString("baseUrl"), body.optString("username"), body.optString("password"),
+            ))
+        } catch (error: MonitoringException) {
+            json(HttpResponse.status(error.statusCode, "Integration Error"), JSONObject().put("error", error.message ?: "Invalid AdGuard Home configuration."))
+        } catch (_: Throwable) {
+            json(HttpResponse.status(500, "Internal Server Error"), JSONObject().put("error", "Could not save AdGuard Home settings."))
+        }
+    }
+
+    private fun forgetMonitoringHome(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.forgetHome())
+
+    private fun monitoringCloud(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot())
+
+    private fun signInMonitoringCloud(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return try {
+            json(HttpResponse.status(200, "OK"), networkMonitoring.signInCloud(
+                body.optString("email"), body.optString("password"), body.optString("mfaCode"),
+            ))
+        } catch (error: MonitoringException) {
+            json(HttpResponse.status(error.statusCode, "Integration Error"), JSONObject().put("error", error.message ?: "AdGuard DNS sign-in failed."))
+        } catch (_: Throwable) {
+            json(HttpResponse.status(502, "Bad Gateway"), JSONObject().put("error", "AdGuard DNS sign-in failed."))
+        }
+    }
+
+    private fun refreshMonitoringCloud(): HttpResponse =
+        try { json(HttpResponse.status(200, "OK"), networkMonitoring.cloudSnapshot(forceRefresh = true)) }
+        catch (_: Throwable) { json(HttpResponse.status(502, "Bad Gateway"), JSONObject().put("error", "Could not refresh AdGuard DNS data.")) }
+
+    private fun signOutMonitoringCloud(): HttpResponse =
+        json(HttpResponse.status(200, "OK"), networkMonitoring.signOutCloud())
+
+    private fun configureEveryProxy(request: HttpRequest): HttpResponse {
+        if (request.method != "POST") return json(HttpResponse.status(405, "Method Not Allowed"), JSONObject().put("error", "POST required."))
+        val body = parseJsonBody(request) ?: return json(HttpResponse.status(400, "Bad Request"), JSONObject().put("error", "Invalid JSON body."))
+        return try {
+            json(HttpResponse.status(200, "OK"), networkMonitoring.setEveryProxyPort(body.optInt("port", 0)))
+        } catch (error: MonitoringException) {
+            json(HttpResponse.status(error.statusCode, "Bad Request"), JSONObject().put("error", error.message ?: "Invalid port."))
+        }
+    }
+
+    private fun parseJsonBody(request: HttpRequest): JSONObject? {
+        if (!request.header("Content-Type").orEmpty().contains("application/json", ignoreCase = true)) return null
+        val body = readBody(request)
+        if (body.isBlank()) return null
+        return runCatching { JSONObject(body) }.getOrNull()
     }
 
     private fun restart(request: HttpRequest): HttpResponse {

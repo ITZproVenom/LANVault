@@ -28,6 +28,8 @@ class VaultServer(
     private val storageRepository: StorageRepository,
 ) {
 
+    internal val monitoringContext: Context get() = context.applicationContext
+
     private val fileSystem = VaultFileSystem(storageRepository, settingsStore)
     private val webDavHandler = WebDavHandler(fileSystem, settingsStore)
     private val apiHandler = ApiHandler(this, settingsStore, storageRepository)
@@ -174,10 +176,27 @@ class VaultServer(
     private fun route(request: HttpRequest): HttpResponse {
         val settings = settingsStore.current()
 
+        if (request.path.startsWith("/api/monitoring")) {
+            if (!settings.requireAuth) {
+                return HttpResponse.status(403, "Forbidden").apply {
+                    header("Content-Type", "text/plain; charset=utf-8")
+                    bodyBytes = "Enable username/password protection in LANVault Settings before using network-monitoring integrations.".toByteArray(Charsets.UTF_8)
+                }
+            }
+            if (!authorized(request, settings)) {
+                return HttpResponse.status(401, "Unauthorized").apply {
+                    header("WWW-Authenticate", "Basic realm=\\\"LANVault monitoring\\\"")
+                    header("Content-Type", "text/plain; charset=utf-8")
+                    header("Content-Length", "0")
+                }
+            }
+            return apiHandler.handle(request)
+        }
+
         if (request.path.startsWith("/api/") || request.path == "/api") {
             if (settings.requireAuth && !authorized(request, settings)) {
                 return HttpResponse.status(401, "Unauthorized").apply {
-                    header("WWW-Authenticate", "Basic realm=\"LANVault\"")
+                    header("WWW-Authenticate", "Basic realm=\\\"LANVault\\\"")
                     header("Content-Type", "text/plain; charset=utf-8")
                     header("Content-Length", "0")
                 }

@@ -107,6 +107,22 @@ Everything below is editable at `/ui/` → **Settings** while the server is runn
 | Keep CPU awake | Stops the screen dimming from interrupting a transfer. |
 | Serve WebDAV | Turns the WebDAV share off, leaving only the web interface. |
 
+## Network monitoring
+
+The **Network monitor** tab is read-only and does not replace Every Proxy or AdGuard VPN.
+
+- **TV metrics:** Android VPN transport when reported, memory, exposed thermal sensors, uptime, network-interface byte counters, and the kernel ARP neighbour table when readable.
+- **Every Proxy:** optionally probe its local TCP listening port. This checks whether a listener accepts a connection; it does not validate proxy auth or change Every Proxy settings.
+- **AdGuard Home:** connect to an already-running instance to read status, DNS statistics, known clients and recent query logs. DNS query counts are not internet bandwidth totals.
+- **AdGuard DNS account:** sign in to the official API and sync existing DNS profiles, devices, and available last-24-hour query statistics. The account password is not stored; session tokens and AdGuard Home credentials are encrypted using Android Keystore. This integration is read-only.
+- **Per-device bandwidth:** requires router traffic counters, SNMP, flow export or a compatible router API. The monitor does not infer per-device byte counts from DNS queries.
+
+### Monitoring security
+
+The `/api/monitoring/*` API requires LANVault username/password protection. Enable it in **Settings** before adding credentials. LANVault's current browser interface uses HTTP, not HTTPS: use sign-in/configuration only on a trusted LAN because browser-to-TV requests are not encrypted in transit. Cloud access tokens and local AdGuard Home credentials are encrypted at rest with an Android Keystore key.
+
+AdGuard Home needs to be installed and running separately before you connect it here. The monitoring page does not install AdGuard Home or change router DNS settings. For network-wide filtering, configure the router's DHCP/DNS settings to use a reachable AdGuard Home DNS listener only after confirming the Home service works.
+
 ## How it is put together
 
 ```

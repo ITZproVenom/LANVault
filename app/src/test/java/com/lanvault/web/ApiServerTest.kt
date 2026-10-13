@@ -130,6 +130,18 @@ class ApiServerTest {
     }
 
     @Test
+    fun `monitoring api is protected when LANVault auth is disabled`() {
+        val denied = request("GET", "/api/monitoring/status")
+        assertEquals(403, denied.code)
+
+        settingsStore.update { it.copy(requireAuth = true, username = "lanvault", password = "secret") }
+        val allowed = json("GET", "/api/monitoring/status", credentials = "lanvault" to "secret")
+        assertEquals(200, allowed.code)
+        assertTrue(allowed.body.contains("\"vpnActive\""))
+        assertTrue(allowed.body.contains("\"routerNeighbors\""))
+    }
+
+    @Test
     fun `volumes lists drives with capacity`() {
         val response = json("GET", "/api/volumes")
         assertEquals(200, response.code)
