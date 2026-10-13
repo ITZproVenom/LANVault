@@ -16,6 +16,8 @@ import com.lanvault.storage.SafePath
 import com.lanvault.storage.StorageRepository
 import com.lanvault.storage.VaultFileSystem
 import com.lanvault.storage.VolumeKind
+import com.lanvault.SmbServerRuntime
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 /**
@@ -69,6 +71,7 @@ class VaultServer(
                 server = listener
                 lastError = null
                 reportStarted(listener.port, preferred)
+                syncSmb()
                 return
             } catch (error: Throwable) {
                 runCatching { listener.close() }
@@ -117,7 +120,7 @@ class VaultServer(
         }
         val settings = settingsStore.current()
         if (!settings.shareWebdav) {
-            EventLog.shared.warn("WebDAV sharing is switched off - iPhone Files cannot connect.")
+            EventLog.shared.warn("WebDAV is switched off; SMB can still serve native iPhone Files.")
         }
         if (!storageRepository.hasAllFilesAccess()) {
             EventLog.shared.warn("Full storage access is not granted - some drives may be hidden.")
@@ -133,9 +136,20 @@ class VaultServer(
     }
 
     fun stop() {
+        SmbServerRuntime.get(context).stop()
         server?.close()
         server = null
         EventLog.shared.info("Server stopped.")
+    }
+
+    fun smbStatus(): JSONObject = SmbServerRuntime.get(context).status()
+
+    fun syncSmb() {
+        val settings = settingsStore.current()
+        val result = SmbServerRuntime.get(context).sync(settings, storageRepository)
+        if (settings.shareSmb && !result.optBoolean("running") && !result.optBoolean("starting")) {
+            EventLog.shared.warn(result.optString("message", "SMB server is not running."))
+        }
     }
 
     fun restart() {

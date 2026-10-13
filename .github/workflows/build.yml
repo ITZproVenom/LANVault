@@ -75,6 +75,24 @@ jobs:
           test -s "$AGH_OUT/AdGuardHome-android-arm64"
           chmod 644 "$AGH_OUT/LICENSE.txt" "$AGH_OUT/SOURCE.txt"
 
+      - name: Build and test SMB2/3 server for Android
+        run: |
+          set -euxo pipefail
+          cd smb-server
+          go mod tidy
+          go test ./...
+          SMB_OUT="$GITHUB_WORKSPACE/app/src/main/assets/smb"
+          mkdir -p "$SMB_OUT"
+          cp LICENSE "$SMB_OUT/LICENSE.txt"
+          printf '%s\n' 'LANVault SMB2/3 server' 'Dependency: github.com/sonroyaalmerol/go-smb-server@d07dc723a2926177b4bc20c806d95cb2c3b1c70a' 'MIT license and source attribution included.' > "$SMB_OUT/SOURCE.txt"
+          CGO_ENABLED=0 GOOS=android GOARCH=arm GOARM=7 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm" .
+          CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "$SMB_OUT/lanvault-smb-android-arm64" .
+          file "$SMB_OUT/lanvault-smb-android-arm"
+          file "$SMB_OUT/lanvault-smb-android-arm64"
+          test -s "$SMB_OUT/lanvault-smb-android-arm"
+          test -s "$SMB_OUT/lanvault-smb-android-arm64"
+          chmod 644 "$SMB_OUT/LICENSE.txt" "$SMB_OUT/SOURCE.txt"
+
       - name: Check web JavaScript syntax
         run: node --check app/src/main/assets/web/app.js
 

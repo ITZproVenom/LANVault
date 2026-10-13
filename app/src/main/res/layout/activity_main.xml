@@ -98,7 +98,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
             android:letterSpacing="0.06"
-            android:text="IPHONE FILES SERVER — WEBDAV ENDPOINT"
+            android:text="IPHONE FILES SERVER — SMB2/3"
             android:textColor="@color/text_muted"
             android:textSize="12sp" />
 

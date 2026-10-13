@@ -127,6 +127,7 @@ class ApiHandler(
                 .put("deviceName", settings.deviceName)
                 .put("ipv4Addresses", JSONArray(addresses))
                 .put("hostnames", JSONArray(NetworkAddresses.hostnames()))
+                .put("smbServer", server.smbStatus())
                 .put(
                     "webInterfaceUrl",
                     if (addresses.isEmpty()) null else "http://${addresses.first()}:$port/ui/",
@@ -175,6 +176,7 @@ class ApiHandler(
         .put("autoStartOnBoot", settings.autoStartOnBoot)
         .put("keepCpuAwake", settings.keepCpuAwake)
         .put("shareWebdav", settings.shareWebdav)
+        .put("shareSmb", settings.shareSmb)
 
     private fun volumes(request: HttpRequest): HttpResponse {
         val volumes = storageRepository.discover()
@@ -506,12 +508,14 @@ class ApiHandler(
                         "autoStartOnBoot" -> next = next.copy(autoStartOnBoot = flag)
                         "keepCpuAwake" -> next = next.copy(keepCpuAwake = flag)
                         "shareWebdav" -> next = next.copy(shareWebdav = flag)
+                        "shareSmb" -> next = next.copy(shareSmb = flag)
                     }
                 }
                 form["username"]?.let { if (it.isNotBlank()) next = next.copy(username = it.take(64)) }
                 form["password"]?.let { next = next.copy(password = it.take(128)) }
                 next
             }
+            server.syncSmb()
             val portChanged = true
             EventLog.shared.info("Settings updated from the web interface.")
             return json(

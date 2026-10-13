@@ -10,8 +10,8 @@ Nothing is uploaded anywhere. Everything stays on your LAN.
 
 - **The TV's own storage** and every **USB / SD drive** plugged into it, browsable as one file tree.
 - **A web interface** on your LAN — browse, stream and transfer files from any browser.
-- **WebDAV for compatible clients** at the server root. Native iOS Files “Connect to Server” does
-  not accept LANVault's plain HTTP WebDAV URL; LANVault intentionally does not run SMB.
+- **The iPhone Files app** through *Connect to Server* using the bundled SMB2/3 server.
+  HTTP WebDAV remains available separately for WebDAV-compatible clients.
 - **Direct streaming** — video and audio play straight from the source through HTTP range
   requests, so playback starts before the file has finished arriving.
 - **Two-way transfers** — phone to TV and TV to phone from the browser or a WebDAV-capable client.
@@ -59,13 +59,13 @@ Open the web interface in Safari:
 http://<tv-ip-address>:<port>/ui/
 ```
 
-Use the **Files** view to browse folders, preview supported media, stream playback and transfer files.
-If you specifically need a mounted share inside a file manager, connect using a WebDAV-compatible
-iOS client to `http://<tv-ip-address>:<port>/`.
+Use the **Files** view in Safari for browsing, previews, streaming and transfers. To mount TV storage
+inside the native iPhone Files app, use **Browse → … → Connect to Server** and enter the `smb://`
+address displayed by LANVault. Choose Guest when authentication is disabled, or Registered User with
+the LANVault credentials when authentication is enabled.
 
-**Do not paste the HTTP URL into Files → Browse → … → Connect to Server.** That native iOS
-server dialog rejects LANVault's WebDAV URL. With the “no SMB” design constraint, direct mounting
-inside the built-in Files app is not available; the Safari interface still works over the LAN.
+**Do not enter the HTTP WebDAV URL in Connect to Server.** WebDAV remains enabled separately for
+compatible clients; native iPhone Files uses SMB2/3.
 
 ### If a video will not preview
 
@@ -84,9 +84,9 @@ restart picks it up again.
 
 The web interface shows a **Keep port N** button that pins the fallback port permanently.
 
-> **Protocol:** LANVault speaks **WebDAV** (RFC 4918) at the server root. This works with
-> WebDAV-compatible clients, but not with the native iOS Files “Connect to Server” dialog. SMB is
-> intentionally not implemented.
+> **Protocols:** LANVault supports SMB2/3 for native iPhone Files → Connect to Server and HTTP
+> WebDAV (RFC 4918) for WebDAV-compatible clients. They are separate endpoints and can be enabled
+> or disabled independently.
 
 ### From Android, Windows, macOS, Linux
 
@@ -106,7 +106,8 @@ Everything below is editable at `/ui/` → **Settings** while the server is runn
 | Show hidden files | Includes names starting with a dot. |
 | Start after boot | Keeps the server running when the TV powers on. |
 | Keep CPU awake | Stops the screen dimming from interrupting a transfer. |
-| Serve WebDAV | Turns the WebDAV share off, leaving only the web interface. |
+| Serve WebDAV | Turns the WebDAV endpoint off without disabling SMB file sharing. |
+| Enable native iPhone Files server (SMB2/3) | Exports directly mounted TV/USB volumes using SMB. Tries port 445 and falls back to 1445 when unavailable. |
 
 ## Built-in AdGuard Home service
 

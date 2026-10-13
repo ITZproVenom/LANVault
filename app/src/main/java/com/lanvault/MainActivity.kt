@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.lanvault.net.EventLog
 import com.lanvault.storage.VolumeKind
+import com.lanvault.SmbServerRuntime
 import com.lanvault.web.NetworkAddresses
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -126,12 +127,18 @@ class MainActivity : ComponentActivity() {
             "Server not running. Open the web interface to manage it."
         }
 
+        val smb = SmbServerRuntime.get(this).status()
+        val smbPort = smb.optInt("port", 0)
         if (addresses.isEmpty()) {
             webInterfaceUrl.text = "No network connection"
             webdavUrl.text = "Connect the TV to your network"
         } else {
             webInterfaceUrl.text = addresses.joinToString("\n") { "http://$it:$port/ui/" }
-            webdavUrl.text = addresses.joinToString("\n") { "http://$it:$port/" }
+            webdavUrl.text = if (smb.optBoolean("running") && smbPort > 0) {
+                addresses.joinToString("\n") { SmbServerRuntime.addr(it, smbPort) }
+            } else {
+                smb.optString("message", "SMB server starting")
+            }
         }
         networkNoteValue.text = if (addresses.size > 1) {
             "This TV has ${addresses.size} network addresses. Use the one on the same network " +
@@ -141,15 +148,18 @@ class MainActivity : ComponentActivity() {
         }
         networkNoteValue.visibility = if (addresses.size > 1) View.VISIBLE else View.GONE
 
-        webdavHint.text =
-            "The iPhone Files server endpoint above is still enabled (HTTP WebDAV). The native iOS Files " +
-                "Connect to Server dialog rejects this plain HTTP URL; that is a client-compatibility issue, " +
-                "not a removed server. Use the web interface in Safari or a WebDAV-compatible client. LANVault does not run SMB."
+        webdavHint.text = if (smb.optBoolean("running") && smbPort > 0) {
+            "Files → Browse → … → Connect to Server. Enter the SMB address above. " +
+                if (settings.requireAuth) "Choose Registered User and use the LANVault username/password."
+                else "Choose Guest; no password is required."
+        } else {
+            smb.optString("message", "Starting the SMB2/3 file server…")
+        }
         if (settings.requireAuth) {
-            authStateValue.text = "A username and password are required for protected server/API access."
+            authStateValue.text = "SMB and protected server/API access require the LANVault username and password."
             authStateValue.setTextColor(resources.getColor(R.color.warning, theme))
         } else {
-            authStateValue.text = "Open access: any device on this network can connect without a password."
+            authStateValue.text = "SMB Guest access is enabled. HTTP WebDAV remains available for compatible clients."
             authStateValue.setTextColor(resources.getColor(R.color.text_secondary, theme))
         }
 
@@ -173,7 +183,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun refreshVolumes() {
-        val volumes = withContext(Dispatchers.IO) { AppRuntime.storageRepository.discover() }
+        val volumes = withContext(Dispatchers.IO) {
+            AppRuntime.storageRepository.discover().also { AppRuntime.server?.syncSmb() }
+        }
         val readable = volumes.filter { it.readable }
         visibleDrives = readable.map { it.displayName }
         driveSummary = if (readable.isEmpty()) {

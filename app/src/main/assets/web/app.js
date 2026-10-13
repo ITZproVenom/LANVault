@@ -655,7 +655,8 @@
 
       '<h3>Access links</h3>' +
       addressList('Web interface', 'ui/') +
-      addressList('iPhone Files server URL (HTTP WebDAV endpoint)', '') +
+      smbAddressList() +
+      addressList('WebDAV URL (WebDAV-compatible clients)', '') +
       addressNote(addresses) +
       '<div class="link-box" style="flex-direction:column;align-items:flex-start">' +
       '<strong>Connecting from an iPhone</strong>' +
@@ -670,7 +671,8 @@
       '<h3>Server</h3>' +
       fieldNumber('serverPort', 'WebDAV &amp; web port', 'Port used by both the web interface and iPhone Files.') +
       fieldText('deviceName', 'Server name', 'Shown to WebDAV-compatible clients.') +
-      fieldCheck('shareWebdav', 'Enable Files server (WebDAV)', 'The WebDAV file server stays enabled at the URL above. The native iOS Files “Connect to Server” dialog currently rejects this plain HTTP endpoint; that does not mean the server was removed. SMB is not enabled.') +
+      fieldCheck('shareWebdav', 'Enable WebDAV for compatible clients', 'Keeps the HTTP WebDAV endpoint available for WebDAV-capable clients, separately from native iPhone Files SMB.') +
+      fieldCheck('shareSmb', 'Enable native iPhone Files server (SMB2/3)', 'Exports directly mounted TV and USB volumes. It tries port 445 first and falls back to 1445 if port 445 is unavailable.') +
 
       '<h3>Access control</h3>' +
       fieldCheck('requireAuth', 'Require a username and password', 'Applies to the web interface and to iPhone Files.') +
@@ -711,6 +713,7 @@
     hydrateInputs('serverPort', settings.serverPort);
     hydrateInputs('deviceName', settings.deviceName);
     hydrateInputs('shareWebdav', settings.shareWebdav);
+    hydrateInputs('shareSmb', settings.shareSmb);
     hydrateInputs('requireAuth', settings.requireAuth);
     hydrateInputs('username', settings.username);
     hydrateInputs('password', settings.password);
@@ -757,20 +760,28 @@
       'so it is the one your device can use. Detected: ' + escapeHtml(addresses || '') + '</p>';
   }
 
-  /*
-   * The native iOS Files "Connect to Server" sheet does not accept LANVault's HTTP WebDAV URL.
-   * Do not tell users to paste it there. With no SMB server by design, use the browser UI or
-   * a WebDAV-capable client for direct WebDAV access.
-   */
+  function smbAddressList() {
+    var smb = state.info.smbServer || {};
+    var ips = state.info.ipv4Addresses || [];
+    var port = Number(smb.port || 0);
+    if (!smb.enabled) return '<div class="link-box"><span class="hint">SMB server disabled in Settings.</span></div>';
+    if (!smb.running || !port) return '<div class="link-box"><span class="hint">iPhone Files server: ' + escapeHtml(smb.message || 'SMB starting.') + '</span></div>';
+    return ips.map(function (ip) {
+      var url = 'smb://' + ip + (port === 445 ? '' : ':' + port);
+      var working = state.reachableAddress && ip === state.reachableAddress;
+      return '<div class="link-box"><span class="mono">iPhone Files server: ' + escapeHtml(url) + '</span>' +
+        (working ? '<strong style="color:var(--accent);font-size:13px">same interface as this browser</strong>' : '') + '</div>';
+    }).join('') + '<p class="hint">Shares: ' + escapeHtml((smb.shareNames || []).join(', ')) + '. Enter this SMB address in Files → Browse → … → Connect to Server.</p>';
+  }
   function iphoneInstructions() {
-    var ip = state.reachableAddress ||
-      (state.info.ipv4Addresses || [])[0] || '<tv-ip>';
-    var port = state.info.port || 8081;
-    var webUrl = 'http://' + ip + ':' + port + '/ui/';
-    var webdavUrl = 'http://' + ip + ':' + port + '/';
-    return 'Files server endpoint: <code>' + escapeHtml(webdavUrl) + '</code> (HTTP WebDAV). It remains enabled when “Enable Files server (WebDAV)” is on. ' +
-      'Your native iPhone Files “Connect to Server” dialog rejects this plain HTTP endpoint, so use <a href="' + escapeHtml(webUrl) + '">' +
-      escapeHtml(webUrl) + '</a> in Safari or use a WebDAV-compatible client. LANVault intentionally does not provide SMB.';
+    var smb = state.info.smbServer || {};
+    var ip = state.reachableAddress || (state.info.ipv4Addresses || [])[0] || '<tv-ip>';
+    var port = Number(smb.port || 0);
+    if (!smb.enabled) return 'Enable the native iPhone Files server (SMB2/3) in Settings.';
+    if (!smb.running || !port) return escapeHtml(smb.message || 'SMB server is starting.');
+    var url = 'smb://' + ip + (port === 445 ? '' : ':' + port);
+    if (state.requiresAuth) return 'Files → Browse → … → Connect to Server, enter <code>' + escapeHtml(url) + '</code>, choose <strong>Registered User</strong>, and sign in with <strong>' + escapeHtml(state.settings.username || 'lanvault') + '</strong> and your LANVault password.';
+    return 'Files → Browse → … → Connect to Server, enter <code>' + escapeHtml(url) + '</code>, and choose <strong>Guest</strong>. WebDAV remains separately available at <code>' + escapeHtml('http://' + ip + ':' + (state.info.port || 8081) + '/') + '</code> for compatible clients.';
   }
 
   function fieldText(id, label, desc) {
@@ -810,7 +821,8 @@
       'showHiddenFiles=' + checkboxValue('showHiddenFiles'),
       'autoStartOnBoot=' + checkboxValue('autoStartOnBoot'),
       'keepCpuAwake=' + checkboxValue('keepCpuAwake'),
-      'shareWebdav=' + checkboxValue('shareWebdav')
+      'shareWebdav=' + checkboxValue('shareWebdav'),
+      'shareSmb=' + checkboxValue('shareSmb')
     ].join('&');
 
     api('/api/settings', {

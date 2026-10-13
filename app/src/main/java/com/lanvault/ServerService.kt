@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import com.lanvault.net.EventLog
 import com.lanvault.monitor.AdGuardHomeRuntime
+import com.lanvault.SmbServerRuntime
 import com.lanvault.web.NetworkAddresses
 
 /** Keeps the LAN storage server alive while the TV is on. */
@@ -93,6 +94,9 @@ class ServerService : LifecycleService() {
         val addresses = NetworkAddresses.ipv4()
         val host = addresses.firstOrNull() ?: "this-tv"
         val sharing = AppRuntime.server?.isRunning == true
+        val smb = SmbServerRuntime.get(this).status()
+        val smbPort = smb.optInt("port", 0)
+        val smbAddress = addresses.firstOrNull()?.let { if (smbPort > 0) SmbServerRuntime.addr(it, smbPort) else "" }.orEmpty()
         val openIntent = Intent(this, MainActivity::class.java)
         val pendingOpen = PendingIntent.getActivity(
             this,
@@ -108,7 +112,7 @@ class ServerService : LifecycleService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val content = if (sharing) {
-            "http://" + host + ":" + port + "/ui/ · WebDAV on port " + port
+            "Web " + port + " · " + (smbAddress.ifBlank { "SMB starting" })
         } else {
             "File sharing stopped; AdGuard Home may remain active."
         }
@@ -123,10 +127,12 @@ class ServerService : LifecycleService() {
                             if (sharing) {
                                 append("Web interface: ")
                                 append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/ui/" }.ifEmpty { host })
+                                append("\niPhone Files SMB server: ")
+                                append(if (smbAddress.isBlank()) smb.optString("message", "Starting SMB server…") else smbAddress)
                                 append("\nWebDAV URL (WebDAV-compatible clients): ")
                                 append(addresses.joinToString("  ") { "http://" + it + ":" + port + "/" }.ifEmpty { host })
                                 append("\nOpen the /ui/ address in Safari to browse and stream files. ")
-                                append("The native iPhone Files Connect to Server dialog rejects this HTTP WebDAV URL; LANVault does not provide SMB. ")
+                                append("Enter the SMB address above in Files → Browse → … → Connect to Server. ")
                                 append("All settings and monitoring are controlled from the web interface.")
                             } else {
                                 append("File sharing is stopped. The bundled AdGuard Home DNS service can remain active; ")
