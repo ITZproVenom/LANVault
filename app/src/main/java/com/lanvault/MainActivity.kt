@@ -142,8 +142,9 @@ class MainActivity : ComponentActivity() {
         networkNoteValue.visibility = if (addresses.size > 1) View.VISIBLE else View.GONE
 
         webdavHint.text =
-            "WebDAV is for compatible clients, not the native iPhone Files Connect to Server dialog. " +
-                "Open the Web interface link above in Safari to browse and stream. LANVault does not run SMB."
+            "The iPhone Files server endpoint above is still enabled (HTTP WebDAV). The native iOS Files " +
+                "Connect to Server dialog rejects this plain HTTP URL; that is a client-compatibility issue, " +
+                "not a removed server. Use the web interface in Safari or a WebDAV-compatible client. LANVault does not run SMB."
         if (settings.requireAuth) {
             authStateValue.text = "A username and password are required for protected server/API access."
             authStateValue.setTextColor(resources.getColor(R.color.warning, theme))
