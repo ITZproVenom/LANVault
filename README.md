@@ -119,7 +119,7 @@ using **Show generated admin login** and open the dashboard link on port 3000. S
 clients, and query logging. The optional “Connect to another AdGuard Home” fields are for a
 separate instance, not the bundled server.
 
-This unprivileged Android build configures DNS on port 5353 so AdGuard Home can start without root.
+This unprivileged Android build configures DNS on port 53535 so AdGuard Home can start without root.
 Its dashboard and filtering controls can run, but most routers require DNS on port 53 and cannot
 specify a custom port. **Do not point the router's DNS at this TV yet.** Router-wide DNS filtering
 requires a supported privileged port-53 configuration or router-side forwarding; this has not
